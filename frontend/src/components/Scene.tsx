@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useDesign } from "../designStore";
-import { MannequinBody, MannequinParts } from "./Mannequin";
+import { MannequinBody, MannequinParts, SlotHitBoxes } from "./Mannequin";
 import { MANNEQUIN_SLOTS } from "../presets";
 
 export interface PendingDrop {
@@ -79,29 +79,8 @@ export function Scene({
       <MannequinBody />
       <MannequinParts />
 
-      {/* Invisible slot meshes for raycast (drop and hover) - named for raycast */}
-      <group>
-        {MANNEQUIN_SLOTS.map((slot) => (
-          <mesh
-            key={slot.id}
-            name={`slot-${slot.id}`}
-            position={slot.position}
-            rotation={slot.rotation}
-            visible={false}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (dragData && slot.accepts.includes(dragData.slotKind)) {
-                handleSlotDrop(slot.id, dragData.meshId);
-              }
-            }}
-          >
-            <sphereGeometry args={[0.45, 8, 6]} />
-          </mesh>
-        ))}
-      </group>
+      {/* Slot hit boxes: transparent with solid outline, raycastable */}
+      <SlotHitBoxes dragData={dragData} onSlotDrop={handleSlotDrop} />
 
       {selectedPart && (() => {
         const slot = MANNEQUIN_SLOTS.find((s) => s.id === selectedPart.slotId);
@@ -116,8 +95,9 @@ export function Scene({
             mode="scale"
             size={0.5}
             onObjectChange={(e) => {
-              if (!e.target.object || !selectedInstanceId) return;
-              const t = e.target.object as THREE.Object3D;
+              const target = e?.target as { object?: THREE.Object3D } | undefined;
+              if (!target?.object || !selectedInstanceId) return;
+              const t = target.object;
               const s = (t.scale.x + t.scale.y + t.scale.z) / 3;
               updatePart(selectedInstanceId, { scale: Math.max(0.2, Math.min(3, s)) });
             }}
