@@ -331,6 +331,12 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.segment-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: #8892a0;
+}
+
 .row-colors .color-row {
   margin-bottom: 0.35rem;
 }

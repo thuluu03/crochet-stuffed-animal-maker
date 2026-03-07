@@ -188,10 +188,8 @@ export function MannequinParts() {
             part={part}
             slotPosition={slot.position}
             selected={selectedInstanceId === part.instanceId}
-            onClick={() => {
-              console.log("clicked part:", part.instanceId);
-              setSelected(part.instanceId);
-            }}
+            onClick={() => setSelected(part.instanceId)}
+            onHover={() => {}}
           />
         );
       })}

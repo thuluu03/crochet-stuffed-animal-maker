@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
+import { TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useDesign } from "../designStore";
 import { MannequinBody, MannequinParts } from "./Mannequin";
@@ -35,8 +36,7 @@ export function Scene({
   dragData,
   setDragData,
 }: SceneProps) {
-  const { addPart } = useDesign();
-
+  const { addPart, selectedInstanceId, updatePart, getPart } = useDesign();
   const handleSlotDrop = useCallback(
     (slotId: string, meshId: string) => {
       addPart(meshId, slotId);
@@ -60,6 +60,8 @@ export function Scene({
     const x = ((pendingDrop.clientX - rect.left) / rect.width) * 2 - 1;
     const y = -((pendingDrop.clientY - rect.top) / rect.height) * 2 + 1;
     const raycaster = new THREE.Raycaster();
+    raycaster.layers.set(0);
+    raycaster.layers.enable(1);
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     const scene = state.scene;
     const allMeshes: THREE.Object3D[] = [];
@@ -86,6 +88,18 @@ export function Scene({
     }
   });
 
+  const selectedPart = selectedInstanceId ? getPart(selectedInstanceId) : null;
+
+  // When not dragging, only raycast layer 0 so parts receive hover; slots are on layer 1
+  useFrame((state) => {
+    if (!dragData) {
+      state.raycaster.layers.set(0);
+    } else {
+      state.raycaster.layers.set(0);
+      state.raycaster.layers.enable(1);
+    }
+  });
+
   return (
     <>
       <ambientLight intensity={0.6} />
@@ -98,7 +112,7 @@ export function Scene({
       <MannequinBody />
       <MannequinParts />
 
-      {/* Invisible slot meshes for raycast (drop and hover) - named for raycast */}
+      {/* Slot meshes on layer 1 so they don't steal pointer from parts; drop raycast enables layer 1 */}
       <group>
         {MANNEQUIN_SLOTS.map((slot) => (
           <mesh
@@ -107,6 +121,9 @@ export function Scene({
             position={slot.position}
             rotation={slot.rotation}
             visible={false}
+            ref={(r) => {
+              if (r) r.layers.set(1);
+            }}
             onPointerOver={(e) => {
               e.stopPropagation();
             }}
@@ -121,6 +138,45 @@ export function Scene({
           </mesh>
         ))}
       </group>
+
+      {selectedPart &&
+        (() => {
+          const slot = MANNEQUIN_SLOTS.find(
+            (s) => s.id === selectedPart.slotId,
+          );
+          if (!slot) return null;
+          const pos: [number, number, number] = [
+            slot.position[0] + selectedPart.position[0],
+            slot.position[1] + selectedPart.position[1],
+            slot.position[2] + selectedPart.position[2],
+          ];
+          return (
+            <TransformControls
+              mode="scale"
+              size={0.5}
+              onObjectChange={(e) => {
+                const object = (
+                  e?.target as { object?: THREE.Object3D } | undefined
+                )?.object;
+                if (!object || !selectedInstanceId) return;
+                const t = object;
+                const s = (t.scale.x + t.scale.y + t.scale.z) / 3;
+                updatePart(selectedInstanceId, {
+                  scale: Math.max(0.2, Math.min(3, s)),
+                });
+              }}
+            >
+              <group
+                position={pos}
+                scale={[
+                  selectedPart.scale,
+                  selectedPart.scale,
+                  selectedPart.scale,
+                ]}
+              />
+            </TransformControls>
+          );
+        })()}
     </>
   );
 }
