@@ -161,6 +161,7 @@ export function MannequinParts() {
             slotPosition={slot.position}
             selected={selectedInstanceId === part.instanceId}
             onClick={() => setSelected(part.instanceId)}
+            onHover={() => {}}
           />
         );
       })}

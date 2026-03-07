@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { useDesign } from "../designStore";
 import { saveDesign } from "../api";
-
-const ROW_COUNT = 5; // Optional: number of "rows" for stitch coloring
+import { getSegmentCount } from "../presets";
 
 export function SaveAndColor() {
-  const { parts, selectedInstanceId, getPart, updatePart, removePart, buildPayload } = useDesign();
+  const { parts, selectedInstanceId, getPart, updatePart, removePart, buildPayload, setSelected } = useDesign();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [designName, setDesignName] = useState("My stuffed animal");
 
   const selectedPart = selectedInstanceId ? getPart(selectedInstanceId) : undefined;
+  const segmentCount = selectedPart ? getSegmentCount(selectedPart.meshId) : 0;
 
   const handleSave = async () => {
     setSaving(true);
@@ -59,9 +59,10 @@ export function SaveAndColor() {
 
       {selectedPart && (
         <div className="color-panel">
+          <button type='button' onClick={() => {setSelected(null)}}>Close</button>
           <h3>Part: {selectedPart.meshId}</h3>
           <div className="color-row">
-            <label>Color</label>
+            <label>Base color</label>
             <input
               type="color"
               value={selectedPart.color}
@@ -70,10 +71,11 @@ export function SaveAndColor() {
             <span className="color-hex">{selectedPart.color}</span>
           </div>
           <div className="row-colors">
-            <span className="row-colors-label">Row colors (optional)</span>
-            {Array.from({ length: ROW_COUNT }, (_, i) => (
+            <span className="row-colors-label">Segments: {segmentCount}</span>
+            <p className="segment-hint">Set a color per horizontal segment (row).</p>
+            {Array.from({ length: segmentCount }, (_, i) => (
               <div key={i} className="color-row">
-                <label>Row {i + 1}</label>
+                <label>Segment {i + 1}</label>
                 <input
                   type="color"
                   value={selectedPart.rowColors?.[i] ?? selectedPart.color}
@@ -82,6 +84,7 @@ export function SaveAndColor() {
                     updatePart(selectedPart.instanceId, { rowColors: next });
                   }}
                 />
+                <span className="color-hex">{selectedPart.rowColors?.[i] ?? selectedPart.color}</span>
               </div>
             ))}
           </div>
