@@ -116,8 +116,9 @@ export function Scene({
             mode="scale"
             size={0.5}
             onObjectChange={(e) => {
-              if (!e.target.object || !selectedInstanceId) return;
-              const t = e.target.object as THREE.Object3D;
+              const object = (e?.target as { object?: THREE.Object3D } | undefined)?.object;
+              if (!object || !selectedInstanceId) return;
+              const t = object;
               const s = (t.scale.x + t.scale.y + t.scale.z) / 3;
               updatePart(selectedInstanceId, { scale: Math.max(0.2, Math.min(3, s)) });
             }}

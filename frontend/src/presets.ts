@@ -27,6 +27,7 @@ export const PART_SECTIONS = [
       { id: "body-cone", label: "Cone Body", slotKind: "body" },
       { id: "body-cylinder", label: "Cylinder Body", slotKind: "body" },
       // { id: "body-pill", label: "Pill Body", slotKind: "body" },
+      { id: "body-teardrop", label: "Teardrop Body", slotKind: "body" },
     ],
   },
   {
@@ -35,6 +36,7 @@ export const PART_SECTIONS = [
     items: [
       { id: "limb-sphere", label: "Ball Limb", slotKind: "limb" },
       { id: "limb-cylinder", label: "Cylinder Limb", slotKind: "limb" },
+      { id: "limb-teardrop", label: "Teardrop Limb", slotKind: "limb" },
     ],
   },
   {
@@ -45,6 +47,7 @@ export const PART_SECTIONS = [
       { id: "ear-cylinder", label: "Tube Ear", slotKind: "ear" },
       { id: "ear-cone", label: "Horns", slotKind: "ear" },
       { id: "ear-circle", label: "Circular Ear", slotKind: "ear" },
+      { id: "ear-teardrop", label: "Teardrop Ear", slotKind: "ear" },
     ],
   },
 ];
@@ -76,28 +79,28 @@ export const MANNEQUIN_SLOTS: MannequinSlot[] = [
     label: "Left Arm",
     position: [-0.6, 1.4, 0],
     rotation: [0, 0, Math.PI / 6],
-    accepts: ["arm"],
+    accepts: ["arm", "limb"],
   },
   {
     id: "rightArm",
     label: "Right Arm",
     position: [0.6, 1.4, 0],
     rotation: [0, 0, -Math.PI / 6],
-    accepts: ["arm"],
+    accepts: ["arm", "limb"],
   },
   {
     id: "leftLeg",
     label: "Left Leg",
     position: [-0.25, 0.4, 0],
     rotation: [0, 0, 0],
-    accepts: ["leg"],
+    accepts: ["leg", "limb"],
   },
   {
     id: "rightLeg",
     label: "Right Leg",
     position: [0.25, 0.4, 0],
     rotation: [0, 0, 0],
-    accepts: ["leg"],
+    accepts: ["leg", "limb"],
   },
   {
     id: "leftEar",

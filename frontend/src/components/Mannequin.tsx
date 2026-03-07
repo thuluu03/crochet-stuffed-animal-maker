@@ -147,7 +147,7 @@ export function SlotHitBoxes({
 
 /** Renders all placed parts */
 export function MannequinParts() {
-  const { parts, setSelected, getPart, selectedInstanceId } = useDesign();
+  const { parts, setSelected, selectedInstanceId } = useDesign();
 
   return (
     <>
@@ -159,7 +159,6 @@ export function MannequinParts() {
             key={part.instanceId}
             part={part}
             slotPosition={slot.position}
-            slotRotation={slot.rotation}
             selected={selectedInstanceId === part.instanceId}
             onClick={() => setSelected(part.instanceId)}
           />
