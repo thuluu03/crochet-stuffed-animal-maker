@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDrag } from "../dragStore";
-import { PRESET_MESHES, SHAPES } from "../presets";
+import { PART_SECTIONS, SHAPES } from "../presets";
 
 const DRAG_TYPE = "application/x-preset-mesh";
 
@@ -53,52 +53,65 @@ export function Sidebar() {
         </button>
       </div>
 
-      {activeTab === "parts" ? (
-        <>
-          <h2 className="sidebar-title">Parts</h2>
-          <p className="sidebar-hint">
-            Drag a part onto the mannequin to attach it.
-          </p>
-          <ul className="preset-list">
-            {PRESET_MESHES.map((preset) => (
-              <li key={preset.id}>
-                <div
-                  className="preset-card"
-                  draggable
-                  onDragStart={(e) =>
-                    onDragStart(e, preset.id, preset.slotKind)
-                  }
-                  onDragEnd={onDragEnd}
-                >
-                  <span className="preset-label">{preset.label}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <>
-          <h2 className="sidebar-title">Shapes</h2>
-          <p className="sidebar-hint">
-            Drag a basic shape onto the mannequin to build custom pieces.
-          </p>
-          <ul className="shape-list">
-            {SHAPES.map((shape) => (
-              <li key={shape.id}>
-                <div
-                  className="shape-card"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, shape.id, shape.slotKind)}
-                  onDragEnd={onDragEnd}
-                >
-                  <ShapePreview shapeId={shape.id} />
-                  <span className="shape-label">{shape.label}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <div className="sidebar-content">
+        {activeTab === "parts" ? (
+          <>
+            <h2 className="sidebar-title">Parts</h2>
+            <p className="sidebar-hint">
+              Drag a part onto the mannequin to attach it.
+            </p>
+
+            <div className="part-sections">
+              {PART_SECTIONS.map((section) => (
+                <section key={section.id} className="part-section">
+                  <h3 className="part-section-title">{section.label}</h3>
+
+                  <ul className="part-item-list">
+                    {section.items.map((item) => (
+                      <li key={item.id}>
+                        <div
+                          className="preset-card"
+                          draggable
+                          onDragStart={(e) =>
+                            onDragStart(e, item.id, item.slotKind)
+                          }
+                          onDragEnd={onDragEnd}
+                        >
+                          <span className="preset-label">{item.label}</span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="sidebar-title">Shapes</h2>
+            <p className="sidebar-hint">
+              Drag a basic shape onto the mannequin to build custom pieces.
+            </p>
+            <ul className="shape-list">
+              {SHAPES.map((shape) => (
+                <li key={shape.id}>
+                  <div
+                    className="shape-card"
+                    draggable
+                    onDragStart={(e) =>
+                      onDragStart(e, shape.id, shape.slotKind)
+                    }
+                    onDragEnd={onDragEnd}
+                  >
+                    <ShapePreview shapeId={shape.id} />
+                    <span className="shape-label">{shape.label}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
     </aside>
   );
 }

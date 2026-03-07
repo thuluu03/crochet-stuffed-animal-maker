@@ -14,17 +14,40 @@ interface PartMeshProps {
 function PartGeometry({ meshId }: { meshId: string }) {
   switch (meshId) {
     case "head":
-      return <sphereGeometry args={[0.35, 24, 20]} />;
+    case "head-sphere":
+      return <sphereGeometry args={[0.28, 28, 20]} />;
+    case "head-cylinder":
+      return <cylinderGeometry args={[0.22, 0.26, 0.46, 24]} />;
+    case "body-sphere":
+      return <sphereGeometry args={[0.44, 32, 24]} />;
     case "body":
-      return <cylinderGeometry args={[0.4, 0.5, 0.8, 24]} />;
+    case "body-cylinder":
+      return <cylinderGeometry args={[0.34, 0.4, 0.82, 28]} />;
+    case "body-cone":
+      return <coneGeometry args={[0.38, 0.84, 28]} />;
     case "arm":
-      return <cylinderGeometry args={[0.12, 0.1, 0.5, 16]} />;
     case "leg":
-      return <cylinderGeometry args={[0.15, 0.12, 0.45, 16]} />;
+    case "limb-cylinder":
+      return <cylinderGeometry args={[0.08, 0.09, 0.56, 18]} />;
+    case "limb-sphere":
+      return <sphereGeometry args={[0.15, 20, 16]} />;
+    case "ear-sphere":
+      return <sphereGeometry args={[0.1, 18, 14]} />;
+    case "ear-cylinder":
+      return <cylinderGeometry args={[0.07, 0.07, 0.24, 18]} />;
     case "ear":
-      return <coneGeometry args={[0.15, 0.35, 16]} />;
+    case "ear-cone":
+      return <coneGeometry args={[0.12, 0.3, 18]} />;
+    case "ear-circle":
+      return <cylinderGeometry args={[0.14, 0.14, 0.035, 24]} />;
     case "tail":
       return <sphereGeometry args={[0.2, 16, 12]} />;
+    case "sphere":
+      return <sphereGeometry args={[0.24, 24, 18]} />;
+    case "cylinder":
+      return <cylinderGeometry args={[0.16, 0.16, 0.5, 20]} />;
+    case "cone":
+      return <coneGeometry args={[0.2, 0.5, 20]} />;
     default:
       return <boxGeometry args={[0.3, 0.3, 0.3]} />;
   }

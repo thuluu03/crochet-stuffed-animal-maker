@@ -55,10 +55,15 @@ export function CanvasArea() {
     >
       <Canvas
         shadows
-        camera={{ position: [3, 1.5, 3], fov: 45 }}
+        camera={{ position: [0, 1.15, 4.2], fov: 40 }}
         gl={{ antialias: true }}
       >
-        <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
+        <OrbitControls
+          makeDefault
+          enableDamping
+          dampingFactor={0.05}
+          target={[0, 1.15, 0]}
+        />
         <Scene
           pendingDrop={pendingDrop}
           clearPendingDrop={clearPendingDrop}
