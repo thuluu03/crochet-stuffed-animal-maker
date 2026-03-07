@@ -5,12 +5,21 @@ import { saveDesign } from "../api";
 const ROW_COUNT = 5; // Optional: number of "rows" for stitch coloring
 
 export function SaveAndColor() {
-  const { parts, selectedInstanceId, getPart, updatePart, removePart, buildPayload } = useDesign();
+  const {
+    parts,
+    selectedInstanceId,
+    getPart,
+    updatePart,
+    removePart,
+    buildPayload,
+  } = useDesign();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [designName, setDesignName] = useState("My stuffed animal");
 
-  const selectedPart = selectedInstanceId ? getPart(selectedInstanceId) : undefined;
+  const selectedPart = selectedInstanceId
+    ? getPart(selectedInstanceId)
+    : undefined;
 
   const handleSave = async () => {
     setSaving(true);
@@ -30,7 +39,9 @@ export function SaveAndColor() {
       const result = await saveDesign(payload);
       setMessage(`Saved as ${result.id}`);
     } catch (e) {
-      setMessage("Save failed: " + (e instanceof Error ? e.message : String(e)));
+      setMessage(
+        "Save failed: " + (e instanceof Error ? e.message : String(e)),
+      );
     } finally {
       setSaving(false);
     }
@@ -59,13 +70,15 @@ export function SaveAndColor() {
 
       {selectedPart && (
         <div className="color-panel">
-          <h3>Part: {selectedPart.meshId}</h3>
+          <h3>Part: {selectedPart.slotId}</h3>
           <div className="color-row">
             <label>Color</label>
             <input
               type="color"
               value={selectedPart.color}
-              onChange={(e) => updatePart(selectedPart.instanceId, { color: e.target.value })}
+              onChange={(e) =>
+                updatePart(selectedPart.instanceId, { color: e.target.value })
+              }
             />
             <span className="color-hex">{selectedPart.color}</span>
           </div>
@@ -78,7 +91,10 @@ export function SaveAndColor() {
                   type="color"
                   value={selectedPart.rowColors?.[i] ?? selectedPart.color}
                   onChange={(e) => {
-                    const next = { ...selectedPart.rowColors, [i]: e.target.value };
+                    const next = {
+                      ...selectedPart.rowColors,
+                      [i]: e.target.value,
+                    };
                     updatePart(selectedPart.instanceId, { rowColors: next });
                   }}
                 />

@@ -15,36 +15,10 @@ interface PartGeometryProps {
   emissive: string;
 }
 
-function getTeardropRotation(
-  meshId: string,
-  slotId: string,
-): [number, number, number] {
-  if (meshId === "ear-teardrop" || meshId === "limb-teardrop") {
-    if (slotId === "leftEar" || slotId === "leftArm")
-      return [0, 0, Math.PI / 2];
-    if (slotId === "rightEar" || slotId === "rightArm")
-      return [0, 0, -Math.PI / 2];
-  }
-
-  return [0, 0, 0];
-}
-
-function getTeardropOffset(
-  meshId: string,
-  slotId: string,
-): [number, number, number] {
-  if (meshId === "ear-teardrop") {
-    if (slotId === "leftEar") return [-0.24, 0, 0];
-    if (slotId === "rightEar") return [0.24, 0, 0];
-  }
-
-  return [0, 0, 0];
-}
-
 /** Renders a single body part geometry by preset id */
 function PartGeometry({ meshId, slotId, color, emissive }: PartGeometryProps) {
-  const teardropRotation = getTeardropRotation(meshId, slotId);
-  const teardropOffset = getTeardropOffset(meshId, slotId);
+  // const teardropRotation = getTeardropRotation(meshId, slotId);
+  // const teardropOffset = getTeardropOffset(meshId, slotId);
 
   switch (meshId) {
     case "head":
@@ -112,9 +86,9 @@ function PartGeometry({ meshId, slotId, color, emissive }: PartGeometryProps) {
     case "body-teardrop":
       return (
         <group
-          position={teardropOffset}
-          rotation={teardropRotation}
-          scale={[1.1, 0.95, 1.1]}
+          position={[0, -0.2, 0]}
+          rotation={[0, 0, 0]}
+          scale={[1.6, 1.5, 1.6]}
         >
           <Teardrop color={color} emissive={emissive} />
         </group>
@@ -148,9 +122,9 @@ function PartGeometry({ meshId, slotId, color, emissive }: PartGeometryProps) {
     case "limb-teardrop":
       return (
         <group
-          position={teardropOffset}
-          rotation={teardropRotation}
-          scale={[0.38, 0.52, 0.38]}
+          position={[0, 0, 0]}
+          rotation={[0, 0, 0]}
+          scale={[0.75, 0.75, 0.75]}
         >
           <Teardrop color={color} emissive={emissive} />
         </group>
@@ -207,9 +181,9 @@ function PartGeometry({ meshId, slotId, color, emissive }: PartGeometryProps) {
     case "ear-teardrop":
       return (
         <group
-          position={teardropOffset}
-          rotation={teardropRotation}
-          scale={[0.3, 0.36, 0.3]}
+          position={[0, 0, 0]}
+          rotation={[Math.PI, 0, 0]}
+          scale={[0.5, 0.36, 0.1]}
         >
           <Teardrop color={color} emissive={emissive} />
         </group>

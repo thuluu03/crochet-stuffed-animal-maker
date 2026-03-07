@@ -31,7 +31,6 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     const slot = MANNEQUIN_SLOTS.find((s) => s.id === slotId);
     if (!slot) return;
     setParts((prev) => {
-      if (prev.some((p) => p.slotId === slotId)) return prev;
       const part: PlacedPart = {
         instanceId: nextId(),
         meshId,
@@ -41,8 +40,9 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
         rotation: slot.rotation,
         color: "#c4a574",
       };
-      return [...prev, part];
+      return [...prev.filter((p) => p.slotId !== slotId), part];
     });
+    setSelectedInstanceId(null);
   }, []);
 
   const removePart = useCallback((instanceId: string) => {

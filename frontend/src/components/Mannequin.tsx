@@ -5,96 +5,124 @@ import { PartMesh } from "./PartMesh";
 
 /** Simple torso and slot hit areas for drop detection */
 export function MannequinBody() {
+  const { usedSlots } = useDesign();
+
   return (
     <group>
       {/* Left ear */}
-      <mesh position={[-0.18, 1.98, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.1, 18, 14]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("leftEar") && (
+        <mesh position={[-0.18, 0.96, 0]} castShadow receiveShadow>
+          <sphereGeometry args={[0.1, 18, 14]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Right ear */}
-      <mesh position={[0.18, 1.98, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.1, 18, 14]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("rightEar") && (
+        <mesh position={[0.18, 0.96, 0]} castShadow receiveShadow>
+          <sphereGeometry args={[0.1, 18, 14]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Body */}
-      <mesh position={[0, 1.02, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.34, 0.4, 0.82, 28]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("body") && (
+        <mesh position={[0, 0, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.34, 0.4, 0.82, 28]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Head */}
-      <mesh position={[0, 1.64, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.28, 28, 20]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("head") && (
+        <mesh position={[0, 0.62, 0]} castShadow receiveShadow>
+          <sphereGeometry args={[0.28, 28, 20]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Left arm */}
-      <mesh position={[-0.5, 1.02, 0]} rotation={[0, 0, Math.PI / 1.35]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("leftArm") && (
+        <mesh
+          position={[-0.5, 0, 0]}
+          rotation={[0, 0, Math.PI / 1.35]}
+          castShadow
+          receiveShadow
+        >
+          <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Right arm */}
-      <mesh position={[0.5, 1.02, 0]} rotation={[0, 0, -Math.PI / 1.35]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("rightArm") && (
+        <mesh
+          position={[0.5, 0, 0]}
+          rotation={[0, 0, -Math.PI / 1.35]}
+          castShadow
+          receiveShadow
+        >
+          <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Left leg */}
-      <mesh position={[-0.16, 0.38, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("leftLeg") && (
+        <mesh position={[-0.16, -0.64, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
       {/* Right leg */}
-      <mesh position={[0.16, 0.38, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
-        <meshStandardMaterial
-          color="#e8dcc8"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.22}
-        />
-      </mesh>
+      {!usedSlots.has("rightLeg") && (
+        <mesh position={[0.16, -0.64, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+          <meshStandardMaterial
+            color="#e8dcc8"
+            roughness={0.9}
+            metalness={0}
+            transparent
+            opacity={0.22}
+          />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -160,7 +188,10 @@ export function MannequinParts() {
             part={part}
             slotPosition={slot.position}
             selected={selectedInstanceId === part.instanceId}
-            onClick={() => setSelected(part.instanceId)}
+            onClick={() => {
+              console.log("clicked part:", part.instanceId);
+              setSelected(part.instanceId);
+            }}
           />
         );
       })}

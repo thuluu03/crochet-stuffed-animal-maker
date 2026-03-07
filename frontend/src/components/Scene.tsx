@@ -1,6 +1,5 @@
 import { useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useDesign } from "../designStore";
 import { MannequinBody, MannequinParts } from "./Mannequin";
@@ -20,20 +19,30 @@ interface SceneProps {
   setDragData: (d: { meshId: string; slotKind: string } | null) => void;
 }
 
+function getSlotHitRadius(slotId: string): number {
+  if (slotId === "body") return 0.95;
+  if (slotId === "head") return 0.72;
+  if (slotId === "leftArm" || slotId === "rightArm") return 0.72;
+  if (slotId === "leftLeg" || slotId === "rightLeg") return 0.68;
+  if (slotId === "leftEar" || slotId === "rightEar") return 0.55;
+  if (slotId === "tail") return 0.5;
+  return 0.6;
+}
+
 export function Scene({
   pendingDrop,
   clearPendingDrop,
   dragData,
   setDragData,
 }: SceneProps) {
-  const { addPart, selectedInstanceId, updatePart, getPart } = useDesign();
+  const { addPart } = useDesign();
 
   const handleSlotDrop = useCallback(
     (slotId: string, meshId: string) => {
       addPart(meshId, slotId);
       setDragData(null);
     },
-    [addPart, setDragData]
+    [addPart, setDragData],
   );
 
   // Raycast on drop to find which slot was hit (process only once per drop)
@@ -61,21 +70,31 @@ export function Scene({
     });
     const hits = raycaster.intersectObjects(allMeshes, true);
     if (hits.length > 0) {
-      const hit = hits[0];
-      const slotId = (hit.object as THREE.Mesh).name.replace("slot-", "");
-      const slot = MANNEQUIN_SLOTS.find((s) => s.id === slotId);
-      if (slot && slot.accepts.includes(pendingDrop.slotKind)) {
+      const matchingHit = hits.find((hit) => {
+        const slotId = (hit.object as THREE.Mesh).name.replace("slot-", "");
+        const slot = MANNEQUIN_SLOTS.find((s) => s.id === slotId);
+        return slot && slot.accepts.includes(pendingDrop.slotKind);
+      });
+
+      if (matchingHit) {
+        const slotId = (matchingHit.object as THREE.Mesh).name.replace(
+          "slot-",
+          "",
+        );
         addPart(pendingDrop.meshId, slotId);
       }
     }
   });
 
-  const selectedPart = selectedInstanceId ? getPart(selectedInstanceId) : null;
-
   return (
     <>
       <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 8, 5]} intensity={1} castShadow shadow-mapSize={[1024, 1024]} />
+      <directionalLight
+        position={[5, 8, 5]}
+        intensity={1}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+      />
       <MannequinBody />
       <MannequinParts />
 
@@ -92,41 +111,16 @@ export function Scene({
               e.stopPropagation();
             }}
             onClick={(e) => {
-              e.stopPropagation();
+              // e.stopPropagation();
               if (dragData && slot.accepts.includes(dragData.slotKind)) {
                 handleSlotDrop(slot.id, dragData.meshId);
               }
             }}
           >
-            <sphereGeometry args={[0.45, 8, 6]} />
+            <sphereGeometry args={[getSlotHitRadius(slot.id), 10, 8]} />
           </mesh>
         ))}
       </group>
-
-      {selectedPart && (() => {
-        const slot = MANNEQUIN_SLOTS.find((s) => s.id === selectedPart.slotId);
-        if (!slot) return null;
-        const pos: [number, number, number] = [
-          slot.position[0] + selectedPart.position[0],
-          slot.position[1] + selectedPart.position[1],
-          slot.position[2] + selectedPart.position[2],
-        ];
-        return (
-          <TransformControls
-            mode="scale"
-            size={0.5}
-            onObjectChange={(e) => {
-              const object = (e?.target as { object?: THREE.Object3D } | undefined)?.object;
-              if (!object || !selectedInstanceId) return;
-              const t = object;
-              const s = (t.scale.x + t.scale.y + t.scale.z) / 3;
-              updatePart(selectedInstanceId, { scale: Math.max(0.2, Math.min(3, s)) });
-            }}
-          >
-            <group position={pos} scale={[selectedPart.scale, selectedPart.scale, selectedPart.scale]} />
-          </TransformControls>
-        );
-      })()}
     </>
   );
 }
