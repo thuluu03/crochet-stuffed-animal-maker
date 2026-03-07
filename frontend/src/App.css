@@ -4,7 +4,10 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   background: #1a1a2e;
   color: #e8e8e8;
 }
@@ -69,13 +72,24 @@ body {
   gap: 0.5rem;
 }
 
+.shape-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
 .preset-card {
   padding: 0.75rem 1rem;
   background: #0f3460;
   border-radius: 8px;
   cursor: grab;
   border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .preset-card:hover {
@@ -89,6 +103,119 @@ body {
 .preset-label {
   font-size: 0.9rem;
 }
+
+.shape-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 0.9rem;
+  background: linear-gradient(180deg, #11466e 0%, #0c3150 100%);
+  border-radius: 12px;
+  cursor: grab;
+  border: 1px solid rgba(183, 219, 246, 0.16);
+  transition:
+    transform 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.shape-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(183, 219, 246, 0.34);
+  box-shadow: 0 10px 24px rgba(4, 18, 31, 0.22);
+}
+
+.shape-card:active {
+  cursor: grabbing;
+}
+
+.shape-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.shape-preview {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      circle at 30% 25%,
+      rgba(255, 255, 255, 0.28),
+      transparent 35%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(3, 12, 21, 0.18));
+  border: 1px solid rgba(220, 238, 250, 0.18);
+  flex-shrink: 0;
+}
+
+.shape-preview-sphere {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 30%,
+    #f4fbff,
+    #8ec7e8 58%,
+    #4b84a8 100%
+  );
+  box-shadow: inset -4px -6px 10px rgba(0, 0, 0, 0.18);
+}
+
+.shape-preview-cylinder {
+  width: 20px;
+  height: 30px;
+  position: relative;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #7aa3bf 0%, #e6f3fa 50%, #6d95b1 100%);
+}
+
+/* .shape-preview-cylinder::before,
+.shape-preview-cylinder::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+} */
+
+.shape-preview-cylinder::before {
+  top: -4px;
+  width: 20px;
+  height: 8px;
+  background: rgba(80, 120, 145, 0.35);
+}
+
+.shape-preview-cylinder::after {
+  bottom: -4px;
+  width: 20px;
+  height: 7px;
+  background: rgba(80, 120, 145, 0.35);
+}
+
+.shape-preview-cone {
+  width: 0;
+  height: 0;
+  border-left: 16px solid transparent;
+  border-right: 16px solid transparent;
+  border-bottom: 34px solid #8dc1de;
+  background: linear-gradient(90deg, #7aa3bf 0%, #e6f3fa 50%, #6d95b1 100%);
+  position: relative;
+}
+
+/* .shape-preview-cone::after {
+  content: "";
+  position: absolute;
+  left: -17px;
+  top: 31px;
+  width: 34px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4f7c9c;
+} */
 
 /* Canvas */
 .canvas-area {

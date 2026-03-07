@@ -15,8 +15,8 @@ function App() {
             <SaveAndColor />
           </header>
           <div className="workspace">
-            <Sidebar />
             <CanvasArea />
+            <Sidebar />
           </div>
         </div>
       </DragProvider>

@@ -7,15 +7,93 @@ import { PartMesh } from "./PartMesh";
 export function MannequinBody() {
   return (
     <group>
-      {/* Torso */}
-      <mesh position={[0, 1.2, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.35, 0.4, 0.6, 24]} />
-        <meshStandardMaterial color="#8b7355" roughness={0.9} metalness={0} />
+      {/* Left ear */}
+      <mesh position={[-0.18, 1.98, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[0.1, 18, 14]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
       </mesh>
-      {/* Neck stump */}
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <cylinderGeometry args={[0.2, 0.25, 0.2, 16]} />
-        <meshStandardMaterial color="#8b7355" roughness={0.9} metalness={0} />
+      {/* Right ear */}
+      <mesh position={[0.18, 1.98, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[0.1, 18, 14]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Body */}
+      <mesh position={[0, 1.02, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.34, 0.4, 0.82, 28]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Head */}
+      <mesh position={[0, 1.64, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[0.28, 28, 20]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Left arm */}
+      <mesh position={[-0.5, 1.02, 0]} rotation={[0, 0, Math.PI / 1.35]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Right arm */}
+      <mesh position={[0.5, 1.02, 0]} rotation={[0, 0, -Math.PI / 1.35]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.08, 0.08, 0.6, 18]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Left leg */}
+      <mesh position={[-0.16, 0.38, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
+      </mesh>
+      {/* Right leg */}
+      <mesh position={[0.16, 0.38, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+        <meshStandardMaterial
+          color="#e8dcc8"
+          roughness={0.9}
+          metalness={0}
+          transparent
+          opacity={0.22}
+        />
       </mesh>
     </group>
   );
