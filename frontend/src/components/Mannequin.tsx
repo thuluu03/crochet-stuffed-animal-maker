@@ -175,7 +175,7 @@ export function SlotHitBoxes({
 
 /** Renders all placed parts */
 export function MannequinParts() {
-  const { parts, setSelected, selectedInstanceId } = useDesign();
+  const { parts, setSelected, selectedInstanceId, updatePart } = useDesign();
 
   return (
     <>
@@ -190,6 +190,7 @@ export function MannequinParts() {
             selected={selectedInstanceId === part.instanceId}
             onClick={() => setSelected(part.instanceId)}
             onHover={() => {}}
+            onScaleChange={(scale: [number, number, number]) => updatePart(part.instanceId, { scale })}
           />
         );
       })}

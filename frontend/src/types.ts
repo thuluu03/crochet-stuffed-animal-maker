@@ -24,7 +24,7 @@ export interface PlacedPart {
   meshId: string;
   slotId: string;
   position: [number, number, number];
-  scale: number;
+  scale: [number, number, number];
   rotation: [number, number, number];
   color: string;
   /** Optional row index -> hex for stitch coloring */

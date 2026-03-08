@@ -1,14 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import type { PlacedPart } from "../types";
 import { Teardrop } from "../Teardrop";
-import { Outlines } from "@react-three/drei";
+import { Outlines, useCursor, TransformControls } from "@react-three/drei";
 import { useState } from "react";
+import { useFrame } from "@react-three/fiber";
 import {
   addSegmentVertexColors,
   getBaseGeometry,
   isTeardropType,
 } from "../segmentColors";
 import { getSegmentCount } from "../presets";
+import * as THREE from "three";
+import { setLiveScale, resetLiveScale } from "../liveTransformStore";
 
 interface PartMeshProps {
   part: PlacedPart;
@@ -16,14 +19,16 @@ interface PartMeshProps {
   selected: boolean;
   onClick: () => void;
   onHover: () => void;
+  onScaleChange: (scale: [number, number, number]) => void;
 }
 
 interface PartGeometryProps {
   meshId: string;
-  slotId: string;
   color: string;
   emissive: string;
   showOutline: boolean;
+  outlineColor: string;
+  outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
 }
@@ -36,6 +41,8 @@ function SegmentColoredMesh({
   rowColors,
   emissive,
   showOutline,
+  outlineColor,
+  outlineThickness,
 }: {
   meshId: string;
   segmentCount: number;
@@ -43,6 +50,8 @@ function SegmentColoredMesh({
   rowColors?: Record<number, string>;
   emissive: string;
   showOutline: boolean;
+  outlineColor: string;
+  outlineThickness: number;
 }) {
   const baseGeom = useMemo(() => getBaseGeometry(meshId), [meshId]);
   const coloredGeom = useMemo(() => {
@@ -66,7 +75,9 @@ function SegmentColoredMesh({
         metalness={0.1}
         emissive={emissive}
       />
-      {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+      {showOutline && (
+        <Outlines thickness={outlineThickness} color={outlineColor} />
+      )}
     </mesh>
   );
 }
@@ -74,10 +85,11 @@ function SegmentColoredMesh({
 /** Renders a single body part geometry by preset id */
 function PartGeometry({
   meshId,
-  slotId,
   color,
   emissive,
   showOutline,
+  outlineColor,
+  outlineThickness,
   segmentCount,
   rowColors,
 }: PartGeometryProps) {
@@ -94,6 +106,8 @@ function PartGeometry({
         rowColors={rowColors}
         emissive={emissive}
         showOutline={showOutline}
+        outlineColor={outlineColor}
+        outlineThickness={outlineThickness}
       />
     );
   }
@@ -110,7 +124,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "head-cylinder":
@@ -123,7 +139,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "body-sphere":
@@ -136,7 +154,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#FFFF00" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "body":
@@ -150,7 +170,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "body-cone":
@@ -163,7 +185,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "body-teardrop":
@@ -177,6 +201,8 @@ function PartGeometry({
             color={color}
             emissive={emissive}
             showOutline={showOutline}
+            outlineColor={outlineColor}
+            outlineThickness={outlineThickness}
           />
         </group>
       );
@@ -192,7 +218,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "limb-sphere":
@@ -205,7 +233,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "limb-teardrop":
@@ -219,6 +249,8 @@ function PartGeometry({
             color={color}
             emissive={emissive}
             showOutline={showOutline}
+            outlineColor={outlineColor}
+            outlineThickness={outlineThickness}
           />
         </group>
       );
@@ -232,7 +264,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "ear-cylinder":
@@ -245,7 +279,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "ear":
@@ -259,7 +295,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "ear-circle":
@@ -272,7 +310,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "ear-teardrop":
@@ -286,6 +326,8 @@ function PartGeometry({
             color={color}
             emissive={emissive}
             showOutline={showOutline}
+            outlineColor={outlineColor}
+            outlineThickness={outlineThickness}
           />
         </group>
       );
@@ -299,7 +341,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "sphere":
@@ -312,7 +356,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "cylinder":
@@ -325,7 +371,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     case "cone":
@@ -338,7 +386,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {/* {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />} */}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
     default:
@@ -351,7 +401,9 @@ function PartGeometry({
             metalness={0.1}
             emissive={emissive}
           />
-          {showOutline && <Outlines thickness={0.03} color="#4fc3f7" />}
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
         </mesh>
       );
   }
@@ -363,9 +415,51 @@ export function PartMesh({
   selected,
   onClick,
   onHover,
+  onScaleChange,
 }: PartMeshProps) {
-  const emissive = selected ? "#333333" : "#000000";
+  const emissive = selected ? "#2a2a2a" : "#000000";
   const [hovered, setHovered] = useState(false);
+  const innerGroupRef = useRef<THREE.Group>(null) as React.MutableRefObject<THREE.Group>;
+  const lastScaleRef = useRef({ x: 1, y: 1, z: 1 });
+  useCursor(hovered && !selected, "pointer", "auto");
+
+  // Imperatively set scale so R3F never resets it mid-drag.
+  // Runs when part.scale changes (Apply / mouseUp) or when selected state changes (to initialise).
+  useEffect(() => {
+    if (innerGroupRef.current) {
+      const [sx, sy, sz] = part.scale;
+      innerGroupRef.current.scale.set(sx, sy, sz);
+      lastScaleRef.current = { x: sx, y: sy, z: sz };
+      resetLiveScale(sx, sy, sz);
+    }
+  }, [part.scale[0], part.scale[1], part.scale[2], selected]);
+
+  // Poll scale every frame while selected and push to the live store.
+  useFrame(() => {
+    if (!selected || !innerGroupRef.current) return;
+    const g = innerGroupRef.current;
+    const last = lastScaleRef.current;
+    if (g.scale.x !== last.x || g.scale.y !== last.y || g.scale.z !== last.z) {
+      lastScaleRef.current = { x: g.scale.x, y: g.scale.y, z: g.scale.z };
+      setLiveScale(g.scale.x, g.scale.y, g.scale.z);
+    }
+  });
+
+  const outlineColor = selected ? "#ffffff" : hovered ? "#00e5ff" : "#ff9f1c";
+  const outlineThickness = selected ? 0.065 : hovered ? 5 : 0.085;
+
+  const geometry = (
+    <PartGeometry
+      meshId={part.meshId}
+      color={part.color}
+      emissive={emissive}
+      showOutline={hovered || selected}
+      outlineColor={outlineColor}
+      outlineThickness={outlineThickness}
+      segmentCount={getSegmentCount(part.meshId)}
+      rowColors={part.rowColors}
+    />
+  );
 
   return (
     <group
@@ -375,31 +469,40 @@ export function PartMesh({
         slotPosition[2] + part.position[2],
       ]}
       rotation={[part.rotation[0], part.rotation[1], part.rotation[2]]}
-      scale={part.scale}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
       onPointerOver={(e) => {
         e.stopPropagation();
-        setHovered(true);
+        if (!selected) setHovered(true);
         onHover();
       }}
       onPointerOut={(e) => {
         e.stopPropagation();
-        setHovered(false);
+        if (!selected) setHovered(false);
         onHover();
       }}
     >
-      <PartGeometry
-        meshId={part.meshId}
-        slotId={part.slotId}
-        color={part.color}
-        emissive={emissive}
-        showOutline={hovered}
-        segmentCount={getSegmentCount(part.meshId)}
-        rowColors={part.rowColors}
-      />
+      {/* Scale is managed imperatively via useEffect — no React scale prop here,
+          so R3F never resets it during re-renders while TransformControls is active. */}
+      <group ref={innerGroupRef}>
+        {geometry}
+      </group>
+
+      {selected && (
+        <TransformControls
+          object={innerGroupRef}
+          mode="scale"
+          size={0.6}
+          onMouseUp={() => {
+            const g = innerGroupRef.current;
+            if (!g) return;
+            const clamp = (v: number) => Math.max(0.2, Math.min(3, v));
+            onScaleChange([clamp(g.scale.x), clamp(g.scale.y), clamp(g.scale.z)]);
+          }}
+        />
+      )}
     </group>
   );
 }

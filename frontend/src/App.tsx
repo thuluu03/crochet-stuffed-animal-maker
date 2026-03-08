@@ -3,6 +3,7 @@ import { DragProvider } from "./dragStore";
 import { Sidebar } from "./components/Sidebar";
 import { CanvasArea } from "./components/CanvasArea";
 import { SaveAndColor } from "./components/SaveAndColor";
+import { ColorPopup } from "./components/ColorPopup";
 import "./App.css";
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
             <CanvasArea />
             <Sidebar />
           </div>
+          <ColorPopup />
         </div>
       </DragProvider>
     </DesignProvider>

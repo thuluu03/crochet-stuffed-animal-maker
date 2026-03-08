@@ -1,26 +1,15 @@
 import { useState } from "react";
 import { useDesign } from "../designStore";
 import { saveDesign } from "../api";
-import { getSegmentCount } from "../presets";
 
 export function SaveAndColor() {
   const {
     parts,
-    selectedInstanceId,
-    getPart,
-    updatePart,
-    removePart,
     buildPayload,
-    setSelected,
   } = useDesign();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [designName, setDesignName] = useState("My stuffed animal");
-
-  const selectedPart = selectedInstanceId
-    ? getPart(selectedInstanceId)
-    : undefined;
-  const segmentCount = selectedPart ? getSegmentCount(selectedPart.meshId) : 0;
 
   const handleSave = async () => {
     setSaving(true);
@@ -68,63 +57,6 @@ export function SaveAndColor() {
         </button>
       </div>
       {message && <p className="message">{message}</p>}
-
-      {selectedPart && (
-        <div className="color-panel">
-          <button
-            type="button"
-            onClick={() => {
-              setSelected(null);
-            }}
-          >
-            Close
-          </button>
-          <h3>Part: {selectedPart.slotId}</h3>
-          <div className="color-row">
-            <label>Base color</label>
-            <input
-              type="color"
-              value={selectedPart.color}
-              onChange={(e) =>
-                updatePart(selectedPart.instanceId, { color: e.target.value })
-              }
-            />
-            <span className="color-hex">{selectedPart.color}</span>
-          </div>
-          <div className="row-colors">
-            <span className="row-colors-label">Segments: {segmentCount}</span>
-            <p className="segment-hint">
-              Set a color per horizontal segment (row).
-            </p>
-            {Array.from({ length: segmentCount }, (_, i) => (
-              <div key={i} className="color-row">
-                <label>Segment {i + 1}</label>
-                <input
-                  type="color"
-                  value={selectedPart.rowColors?.[i] ?? selectedPart.color}
-                  onChange={(e) => {
-                    const next = {
-                      ...selectedPart.rowColors,
-                      [i]: e.target.value,
-                    };
-                    updatePart(selectedPart.instanceId, { rowColors: next });
-                  }}
-                />
-                <span className="color-hex">
-                  {selectedPart.rowColors?.[i] ?? selectedPart.color}
-                </span>
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="remove-part-btn"
-            onClick={() => removePart(selectedPart.instanceId)}
-          >
-            Remove part
-          </button>
-        </div>
-      )}
     </div>
   );
 }

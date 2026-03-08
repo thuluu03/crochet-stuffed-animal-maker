@@ -1,6 +1,5 @@
 import { useRef, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
-import { TransformControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useDesign } from "../designStore";
 import { MannequinBody, MannequinParts } from "./Mannequin";
@@ -36,7 +35,7 @@ export function Scene({
   dragData,
   setDragData,
 }: SceneProps) {
-  const { addPart, selectedInstanceId, updatePart, getPart } = useDesign();
+  const { addPart } = useDesign();
   const handleSlotDrop = useCallback(
     (slotId: string, meshId: string) => {
       addPart(meshId, slotId);
@@ -88,8 +87,6 @@ export function Scene({
     }
   });
 
-  const selectedPart = selectedInstanceId ? getPart(selectedInstanceId) : null;
-
   // When not dragging, only raycast layer 0 so parts receive hover; slots are on layer 1
   useFrame((state) => {
     if (!dragData) {
@@ -127,8 +124,7 @@ export function Scene({
             onPointerOver={(e) => {
               e.stopPropagation();
             }}
-            onClick={(e) => {
-              // e.stopPropagation();
+            onClick={() => {
               if (dragData && slot.accepts.includes(dragData.slotKind)) {
                 handleSlotDrop(slot.id, dragData.meshId);
               }
@@ -139,44 +135,6 @@ export function Scene({
         ))}
       </group>
 
-      {selectedPart &&
-        (() => {
-          const slot = MANNEQUIN_SLOTS.find(
-            (s) => s.id === selectedPart.slotId,
-          );
-          if (!slot) return null;
-          const pos: [number, number, number] = [
-            slot.position[0] + selectedPart.position[0],
-            slot.position[1] + selectedPart.position[1],
-            slot.position[2] + selectedPart.position[2],
-          ];
-          return (
-            <TransformControls
-              mode="scale"
-              size={0.5}
-              onObjectChange={(e) => {
-                const object = (
-                  e?.target as { object?: THREE.Object3D } | undefined
-                )?.object;
-                if (!object || !selectedInstanceId) return;
-                const t = object;
-                const s = (t.scale.x + t.scale.y + t.scale.z) / 3;
-                updatePart(selectedInstanceId, {
-                  scale: Math.max(0.2, Math.min(3, s)),
-                });
-              }}
-            >
-              <group
-                position={pos}
-                scale={[
-                  selectedPart.scale,
-                  selectedPart.scale,
-                  selectedPart.scale,
-                ]}
-              />
-            </TransformControls>
-          );
-        })()}
     </>
   );
 }
