@@ -41,7 +41,49 @@ export function addSegmentVertexColors(
     colors[i * 3 + 2] = rgb[2];
   }
 
-  // console.log(colors); 
+  geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  return geom;
+}
+
+/** Teardrop shape Y range in local group space: sphere -0.18..0.18, cone 0..0.7 */
+export const TEARDROP_MIN_Y = -0.18;
+export const TEARDROP_MAX_Y = 0.7;
+
+/**
+ * Like addSegmentVertexColors but maps vertex Y using worldY = localY + yOffset
+ * and the given [minY, maxY] range. Use for multi-part shapes (e.g. teardrop sphere + cone).
+ */
+export function addSegmentVertexColorsWithRange(
+  geometry: THREE.BufferGeometry,
+  segmentCount: number,
+  baseColor: string,
+  segmentColors: Record<number, string> | undefined,
+  minY: number,
+  maxY: number,
+  yOffset: number
+): THREE.BufferGeometry {
+  const geom = geometry.clone();
+  const spanY = maxY - minY || 1;
+
+  const pos = geom.getAttribute("position") as THREE.BufferAttribute;
+  const vertexCount = pos.count;
+  const colors = new Float32Array(vertexCount * 3);
+
+  for (let i = 0; i < vertexCount; i++) {
+    const localY = pos.getY(i);
+    const worldY = localY + yOffset;
+    const t = (worldY - minY) / spanY;
+    const seg = Math.min(
+      Math.max(0, Math.floor(t * segmentCount)),
+      segmentCount - 1
+    );
+    const hex = segmentColors?.[seg] ?? baseColor;
+    const rgb = hexToRgb(hex);
+    colors[i * 3] = rgb[0];
+    colors[i * 3 + 1] = rgb[1];
+    colors[i * 3 + 2] = rgb[2];
+  }
+
   geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   return geom;
 }

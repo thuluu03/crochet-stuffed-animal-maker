@@ -203,6 +203,8 @@ function PartGeometry({
             showOutline={showOutline}
             outlineColor={outlineColor}
             outlineThickness={outlineThickness}
+            segmentCount={segmentCount}
+            segmentColors={rowColors}
           />
         </group>
       );
@@ -251,6 +253,8 @@ function PartGeometry({
             showOutline={showOutline}
             outlineColor={outlineColor}
             outlineThickness={outlineThickness}
+            segmentCount={segmentCount}
+            segmentColors={rowColors}
           />
         </group>
       );
@@ -328,6 +332,8 @@ function PartGeometry({
             showOutline={showOutline}
             outlineColor={outlineColor}
             outlineThickness={outlineThickness}
+            segmentCount={segmentCount}
+            segmentColors={rowColors}
           />
         </group>
       );
