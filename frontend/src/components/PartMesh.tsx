@@ -3,7 +3,7 @@ import type { PlacedPart } from "../types";
 import { Teardrop } from "../Teardrop";
 import { Outlines, useCursor, TransformControls } from "@react-three/drei";
 import { useState } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, createPortal, useThree } from "@react-three/fiber";
 import {
   addSegmentVertexColors,
   getBaseGeometry,
@@ -11,7 +11,8 @@ import {
 } from "../segmentColors";
 import { getSegmentCount } from "../presets";
 import * as THREE from "three";
-import { setLiveScale, resetLiveScale } from "../liveTransformStore";
+import { setLiveScale, setLivePosition, setLiveRotation, resetLiveScale } from "../liveTransformStore";
+import { getTransformMode, subscribeTransformMode } from "../transformModeStore";
 
 interface PartMeshProps {
   part: PlacedPart;
@@ -19,7 +20,7 @@ interface PartMeshProps {
   selected: boolean;
   onClick: () => void;
   onHover: () => void;
-  onScaleChange: (scale: [number, number, number]) => void;
+  onTransformCommit: (updates: Partial<Pick<PlacedPart, "position" | "rotation" | "scale">>) => void;
 }
 
 interface PartGeometryProps {
@@ -421,38 +422,81 @@ export function PartMesh({
   selected,
   onClick,
   onHover,
-  onScaleChange,
+  onTransformCommit,
 }: PartMeshProps) {
-  const emissive = selected ? "#2a2a2a" : "#000000";
+  const emissive = "#000000";
+  const { scene } = useThree();
   const [hovered, setHovered] = useState(false);
-  const innerGroupRef = useRef<THREE.Group>(null) as React.MutableRefObject<THREE.Group>;
+  const [transformMode, setTransformMode] = useState(getTransformMode);
+  const outerGroupRef = useRef<THREE.Group>(null) as React.MutableRefObject<THREE.Group>;
   const lastScaleRef = useRef({ x: 1, y: 1, z: 1 });
   useCursor(hovered && !selected, "pointer", "auto");
 
-  // Imperatively set scale so R3F never resets it mid-drag.
-  // Runs when part.scale changes (Apply / mouseUp) or when selected state changes (to initialise).
   useEffect(() => {
-    if (innerGroupRef.current) {
-      const [sx, sy, sz] = part.scale;
-      innerGroupRef.current.scale.set(sx, sy, sz);
-      lastScaleRef.current = { x: sx, y: sy, z: sz };
-      resetLiveScale(sx, sy, sz);
-    }
+    const unsub = subscribeTransformMode(setTransformMode);
+    return () => { unsub(); };
+  }, []);
+
+  // Imperatively sync position+rotation on outer group so R3F never resets them mid-drag.
+  useEffect(() => {
+    if (!outerGroupRef.current) return;
+    outerGroupRef.current.position.set(
+      slotPosition[0] + part.position[0],
+      slotPosition[1] + part.position[1],
+      slotPosition[2] + part.position[2],
+    );
+    outerGroupRef.current.rotation.set(part.rotation[0], part.rotation[1], part.rotation[2]);
+  }, [part.position[0], part.position[1], part.position[2], part.rotation[0], part.rotation[1], part.rotation[2], slotPosition[0], slotPosition[1], slotPosition[2]]);
+
+  // Imperatively sync scale on outer group.
+  useEffect(() => {
+    if (!outerGroupRef.current) return;
+    const [sx, sy, sz] = part.scale;
+    outerGroupRef.current.scale.set(sx, sy, sz);
+    lastScaleRef.current = { x: sx, y: sy, z: sz };
+    resetLiveScale(sx, sy, sz);
   }, [part.scale[0], part.scale[1], part.scale[2], selected]);
 
-  // Poll scale every frame while selected and push to the live store.
+  // Poll transforms every frame while selected and push to the live store.
   useFrame(() => {
-    if (!selected || !innerGroupRef.current) return;
-    const g = innerGroupRef.current;
+    if (!selected) return;
+    const og = outerGroupRef.current;
+    if (!og) return;
     const last = lastScaleRef.current;
-    if (g.scale.x !== last.x || g.scale.y !== last.y || g.scale.z !== last.z) {
-      lastScaleRef.current = { x: g.scale.x, y: g.scale.y, z: g.scale.z };
-      setLiveScale(g.scale.x, g.scale.y, g.scale.z);
+    if (og.scale.x !== last.x || og.scale.y !== last.y || og.scale.z !== last.z) {
+      lastScaleRef.current = { x: og.scale.x, y: og.scale.y, z: og.scale.z };
+      setLiveScale(og.scale.x, og.scale.y, og.scale.z);
     }
+    setLivePosition(
+      og.position.x - slotPosition[0],
+      og.position.y - slotPosition[1],
+      og.position.z - slotPosition[2],
+    );
+    setLiveRotation(og.rotation.x, og.rotation.y, og.rotation.z);
   });
 
+  const handleMouseUp = () => {
+    const og = outerGroupRef.current;
+    if (!og) return;
+    if (transformMode === "scale") {
+      // Scale is on the outer group (TransformControls scales it directly)
+      const clamp = (v: number) => Math.max(0.2, Math.min(3, v));
+      onTransformCommit({ scale: [clamp(og.scale.x), clamp(og.scale.y), clamp(og.scale.z)] });
+    } else if (transformMode === "translate") {
+      onTransformCommit({
+        position: [
+          og.position.x - slotPosition[0],
+          og.position.y - slotPosition[1],
+          og.position.z - slotPosition[2],
+        ],
+      });
+    } else if (transformMode === "rotate") {
+      onTransformCommit({ rotation: [og.rotation.x, og.rotation.y, og.rotation.z] });
+    }
+  };
+
   const outlineColor = selected ? "#ffffff" : hovered ? "#00e5ff" : "#ff9f1c";
-  const outlineThickness = selected ? 0.065 : hovered ? 5 : 0.085;
+  const outlineThickness = hovered ? 5 : 0.03;
 
   const geometry = (
     <PartGeometry
@@ -469,12 +513,7 @@ export function PartMesh({
 
   return (
     <group
-      position={[
-        slotPosition[0] + part.position[0],
-        slotPosition[1] + part.position[1],
-        slotPosition[2] + part.position[2],
-      ]}
-      rotation={[part.rotation[0], part.rotation[1], part.rotation[2]]}
+      ref={outerGroupRef}
       onClick={(e) => {
         e.stopPropagation();
         onClick();
@@ -490,24 +529,17 @@ export function PartMesh({
         onHover();
       }}
     >
-      {/* Scale is managed imperatively via useEffect — no React scale prop here,
-          so R3F never resets it during re-renders while TransformControls is active. */}
-      <group ref={innerGroupRef}>
-        {geometry}
-      </group>
+      {geometry}
 
-      {selected && (
+      {selected && createPortal(
         <TransformControls
-          object={innerGroupRef}
-          mode="scale"
-          size={0.6}
-          onMouseUp={() => {
-            const g = innerGroupRef.current;
-            if (!g) return;
-            const clamp = (v: number) => Math.max(0.2, Math.min(3, v));
-            onScaleChange([clamp(g.scale.x), clamp(g.scale.y), clamp(g.scale.z)]);
-          }}
-        />
+          key={transformMode}
+          object={outerGroupRef}
+          mode={transformMode}
+          size={0.9}
+          onMouseUp={handleMouseUp}
+        />,
+        scene,
       )}
     </group>
   );

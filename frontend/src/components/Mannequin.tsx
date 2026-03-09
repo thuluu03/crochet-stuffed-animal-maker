@@ -190,7 +190,7 @@ export function MannequinParts() {
             selected={selectedInstanceId === part.instanceId}
             onClick={() => setSelected(part.instanceId)}
             onHover={() => {}}
-            onScaleChange={(scale: [number, number, number]) => updatePart(part.instanceId, { scale })}
+            onTransformCommit={(updates) => updatePart(part.instanceId, updates)}
           />
         );
       })}

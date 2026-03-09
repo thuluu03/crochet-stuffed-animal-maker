@@ -361,6 +361,37 @@ body {
   padding: 0.75rem;
 }
 
+/* Transform mode T/R/S toggle */
+.transform-mode-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.transform-mode-btn {
+  flex: 1;
+  padding: 0.35rem 0;
+  background: #0f3460;
+  color: #8892a0;
+  border: 1px solid #1a4070;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.transform-mode-btn:hover {
+  background: #1a4a7a;
+  color: #e8e8e8;
+}
+
+.transform-mode-btn.active {
+  background: #1a5090;
+  color: #00e5ff;
+  border-color: #00e5ff;
+}
+
 /* Transforms panel */
 .transforms-panel {
   display: flex;
@@ -391,6 +422,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  width: 100%;
 }
 
 .axis-label {
@@ -409,6 +441,30 @@ body {
   font-size: 0.82rem;
   font-family: ui-monospace, monospace;
   color: #e8e8e8;
+}
+
+.axis-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0.2rem 0.35rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #e8e8e8;
+  font-size: 0.82rem;
+  font-family: ui-monospace, monospace;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.axis-input:hover {
+  border-color: #1a4070;
+}
+
+.axis-input:focus {
+  outline: none;
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.06);
 }
 
 .manual-scale {
