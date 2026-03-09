@@ -28,6 +28,7 @@ export const PART_SECTIONS = [
       { id: "body-cylinder", label: "Cylinder Body", slotKind: "body" },
       // { id: "body-pill", label: "Pill Body", slotKind: "body" },
       { id: "body-teardrop", label: "Teardrop Body", slotKind: "body" },
+      { id: "body-custom-teardrop", label: "Custom Teardrop Body", slotKind: "body" },
     ],
   },
   {
@@ -56,6 +57,7 @@ export const SHAPES = [
   { id: "sphere", label: "Sphere", slotKind: "shape" },
   { id: "cylinder", label: "Cylinder", slotKind: "shape" },
   { id: "cone", label: "Cone", slotKind: "shape" },
+  { id: "custom-teardrop", label: "Custom Teardrop", slotKind: "shape" },
 ];
 
 /** Mannequin attachment slots (positions in local space of mannequin) */
@@ -148,6 +150,8 @@ export const SEGMENT_COUNT_BY_MESH_ID: Record<string, number> = {
   sphere: 8,
   cylinder: 8,
   cone: 8,
+  "custom-teardrop": 8,
+  "body-custom-teardrop": 10,
 };
 
 const DEFAULT_SEGMENT_COUNT = 8;

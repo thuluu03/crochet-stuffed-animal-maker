@@ -20,6 +20,8 @@ const MESH_RADIUS: Record<string, number> = {
   "sphere": 0.24,
   "cylinder": 0.28,
   "cone": 0.28,
+  "custom-teardrop": 0.40,
+  "body-custom-teardrop": 0.44,
 };
 
 function getRadius(part: PlacedPart): number {

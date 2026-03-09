@@ -92,7 +92,9 @@ export function isTeardropType(meshId: string): boolean {
   return (
     meshId === "body-teardrop" ||
     meshId === "limb-teardrop" ||
-    meshId === "ear-teardrop"
+    meshId === "ear-teardrop" ||
+    meshId === "custom-teardrop" ||
+    meshId === "body-custom-teardrop"
   );
 }
 

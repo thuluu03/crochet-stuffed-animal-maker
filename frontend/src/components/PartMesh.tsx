@@ -1,11 +1,12 @@
 import { useMemo, useRef, useEffect } from "react";
 import type { PlacedPart } from "../types";
 import { Teardrop } from "../Teardrop";
-import { Outlines, useCursor, TransformControls } from "@react-three/drei";
+import { Outlines, useCursor, TransformControls, useGLTF } from "@react-three/drei";
 import { useState } from "react";
 import { useFrame, createPortal, useThree } from "@react-three/fiber";
 import {
   addSegmentVertexColors,
+  addSegmentVertexColorsWithRange,
   getBaseGeometry,
   isTeardropType,
 } from "../segmentColors";
@@ -81,6 +82,136 @@ function SegmentColoredMesh({
       )}
     </mesh>
   );
+}
+
+const CUSTOM_TEARDROP_URL = "/custom_teardrop.glb";
+const CUSTOM_TEARDROP_TARGET_MAX_WIDTH_DEPTH = 0.88;
+const CUSTOM_TEARDROP_TARGET_MIN_Y = -0.44;
+useGLTF.preload(CUSTOM_TEARDROP_URL);
+
+/** Renders the custom teardrop GLB, with optional segment vertex colors. */
+function CustomTeardropGLTF({
+  color,
+  emissive,
+  showOutline,
+  outlineColor,
+  outlineThickness,
+  segmentCount,
+  rowColors,
+}: {
+  color: string;
+  emissive: string;
+  showOutline: boolean;
+  outlineColor: string;
+  outlineThickness: number;
+  segmentCount: number;
+  rowColors?: Record<number, string>;
+}) {
+  const { scene } = useGLTF(CUSTOM_TEARDROP_URL);
+
+  // Bake each mesh's world transform into its cloned geometry.
+  const bakedGeometries = useMemo(() => {
+    const geoms: THREE.BufferGeometry[] = [];
+    scene.updateMatrixWorld(true);
+    scene.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+        const baked = mesh.geometry.clone();
+        baked.applyMatrix4(mesh.matrixWorld);
+        geoms.push(baked);
+      }
+    });
+    return geoms;
+  }, [scene]);
+
+  // Normalize imported geometry to a deterministic app-space footprint.
+  const normalized = useMemo(() => {
+    if (bakedGeometries.length === 0) {
+      return {
+        geometries: [] as THREE.BufferGeometry[],
+        bounds: null as THREE.Box3 | null,
+      };
+    }
+
+    const sourceBounds = new THREE.Box3();
+    for (const geom of bakedGeometries) {
+      geom.computeBoundingBox();
+      if (geom.boundingBox) sourceBounds.union(geom.boundingBox);
+    }
+
+    if (sourceBounds.isEmpty()) {
+      return {
+        geometries: bakedGeometries.map((g) => g.clone()),
+        bounds: null as THREE.Box3 | null,
+      };
+    }
+
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    sourceBounds.getSize(size);
+    sourceBounds.getCenter(center);
+
+    const maxWidthDepth = Math.max(size.x, size.z, 1e-6);
+    const uniformScale = CUSTOM_TEARDROP_TARGET_MAX_WIDTH_DEPTH / maxWidthDepth;
+    const tx = -center.x * uniformScale;
+    const tz = -center.z * uniformScale;
+    const ty = CUSTOM_TEARDROP_TARGET_MIN_Y - sourceBounds.min.y * uniformScale;
+
+    const scaleMatrix = new THREE.Matrix4().makeScale(
+      uniformScale,
+      uniformScale,
+      uniformScale
+    );
+    const translateMatrix = new THREE.Matrix4().makeTranslation(tx, ty, tz);
+
+    const normalizedGeometries = bakedGeometries.map((geom) => {
+      const normalizedGeom = geom.clone();
+      normalizedGeom.applyMatrix4(scaleMatrix);
+      normalizedGeom.applyMatrix4(translateMatrix);
+      return normalizedGeom;
+    });
+
+    const normalizedBounds = new THREE.Box3();
+    for (const geom of normalizedGeometries) {
+      geom.computeBoundingBox();
+      if (geom.boundingBox) normalizedBounds.union(geom.boundingBox);
+    }
+
+    return {
+      geometries: normalizedGeometries,
+      bounds: normalizedBounds.isEmpty() ? null : normalizedBounds,
+    };
+  }, [bakedGeometries]);
+
+  const coloredGeoms = useMemo(() => {
+    if (segmentCount <= 0 || !normalized.bounds) return null;
+    const minY = normalized.bounds.min.y;
+    const maxY = normalized.bounds.max.y;
+    return normalized.geometries.map((geom) =>
+      addSegmentVertexColorsWithRange(
+        geom,
+        segmentCount,
+        color,
+        rowColors,
+        minY,
+        maxY,
+        0
+      )
+    );
+  }, [normalized, segmentCount, color, rowColors]);
+
+  const meshes = (coloredGeoms ?? normalized.geometries).map((geom, i) => (
+    <mesh key={i} geometry={geom} castShadow receiveShadow>
+      {coloredGeoms ? (
+        <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+      ) : (
+        <meshStandardMaterial color={color} emissive={emissive} roughness={0.8} metalness={0.1} />
+      )}
+      {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
+    </mesh>
+  ));
+
+  return <group>{meshes}</group>;
 }
 
 /** Renders a single body part geometry by preset id */
@@ -397,6 +528,19 @@ function PartGeometry({
             <Outlines thickness={outlineThickness} color={outlineColor} />
           )}
         </mesh>
+      );
+    case "custom-teardrop":
+    case "body-custom-teardrop":
+      return (
+        <CustomTeardropGLTF
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          segmentCount={segmentCount}
+          rowColors={rowColors}
+        />
       );
     default:
       return (
