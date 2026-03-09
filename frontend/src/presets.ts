@@ -116,38 +116,38 @@ export const MANNEQUIN_SLOTS: MannequinSlot[] = [
     rotation: [0, 0, -Math.PI / 6],
     accepts: ["ear", "shape"],
   },
-  {
-    id: "tail",
-    label: "Tail",
-    position: [0, -0.48, 0.5],
-    rotation: [Math.PI / 6, 0, 0],
-    accepts: ["tail", "shape"],
-  },
+  // {
+  //   id: "tail",
+  //   label: "Tail",
+  //   position: [0, -0.48, 0.5],
+  //   rotation: [Math.PI / 6, 0, 0],
+  //   accepts: ["tail", "shape"],
+  // },
 ];
 
 /** Number of horizontal segments (rows) per mesh type for segment coloring */
 export const SEGMENT_COUNT_BY_MESH_ID: Record<string, number> = {
-  "head": 8,
+  head: 8,
   "head-sphere": 8,
   "head-cylinder": 8,
   "body-sphere": 10,
-  "body": 10,
+  body: 10,
   "body-cylinder": 10,
   "body-cone": 10,
   "limb-sphere": 6,
   "limb-cylinder": 6,
   "ear-sphere": 4,
   "ear-cylinder": 4,
-  "ear": 4,
+  ear: 4,
   "ear-cone": 4,
   "ear-circle": 4,
-  "tail": 6,
+  tail: 6,
   "body-teardrop": 8,
   "limb-teardrop": 6,
   "ear-teardrop": 4,
-  "sphere": 8,
-  "cylinder": 8,
-  "cone": 8,
+  sphere: 8,
+  cylinder: 8,
+  cone: 8,
 };
 
 const DEFAULT_SEGMENT_COUNT = 8;
