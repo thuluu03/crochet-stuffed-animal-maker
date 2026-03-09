@@ -599,3 +599,102 @@ body {
   gap: 0.75rem;
   list-style: none;
 }
+
+/* Save modal */
+.save-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.save-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 14px;
+  padding: 2rem 2.5rem;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.save-modal-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.save-modal-icon.success {
+  background: rgba(77, 255, 136, 0.15);
+  color: #4dff88;
+  border: 2px solid #4dff88;
+}
+
+.save-modal-icon.error {
+  background: rgba(233, 69, 96, 0.15);
+  color: #e94560;
+  border: 2px solid #e94560;
+}
+
+.save-modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.save-modal-body {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #a0a0a0;
+  line-height: 1.5;
+}
+
+.save-modal-id {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #8892a0;
+}
+
+.save-modal-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.save-modal-list li {
+  font-size: 0.88rem;
+  color: #e94560;
+  font-weight: 600;
+}
+
+.save-modal-close {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.5rem;
+  background: #e94560;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save-modal-close:hover {
+  background: #ff6b6b;
+}
