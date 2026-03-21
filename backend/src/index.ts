@@ -3,6 +3,7 @@ import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
 import { saveDesign, getDesign, listDesigns } from "./storage.js";
 import type { Design, DesignPart, StoredMesh } from "./types.js";
+import { compileCrochetPattern, patternAttachmentFilename } from "./crochetPattern.js";
 
 const app = express();
 app.use(cors());
@@ -65,6 +66,21 @@ app.get("/api/designs", async (_req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Failed to list designs" });
+  }
+});
+
+app.get("/api/designs/:id/pattern", async (req, res) => {
+  try {
+    const design = await getDesign(req.params.id);
+    if (!design) return res.status(404).json({ error: "Design not found" });
+    const text = compileCrochetPattern(design);
+    const filename = patternAttachmentFilename(design);
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return res.send(text);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to generate pattern" });
   }
 });
 

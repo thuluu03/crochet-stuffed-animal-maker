@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDesign } from "../designStore";
-import { saveDesign } from "../api";
+import { downloadCrochetPattern, saveDesign } from "../api";
 import { findDisconnectedParts } from "../checkConnectivity";
 
 type ModalState =
@@ -12,6 +12,19 @@ export function SaveAndColor() {
   const [saving, setSaving] = useState(false);
   const [designName, setDesignName] = useState("My stuffed animal");
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [lastSavedDesignId, setLastSavedDesignId] = useState<string | null>(null);
+  const [patternLoading, setPatternLoading] = useState(false);
+
+  const handleDownloadPattern = async (designId: string) => {
+    setPatternLoading(true);
+    try {
+      await downloadCrochetPattern(designId, designName);
+    } catch (e) {
+      alert("Pattern download failed: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setPatternLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     const disconnected = findDisconnectedParts(parts);
@@ -34,6 +47,7 @@ export function SaveAndColor() {
       const payload = buildPayload(finalizedMeshes);
       payload.name = designName;
       const result = await saveDesign(payload);
+      setLastSavedDesignId(result.id);
       setModal({ type: "success", id: result.id });
     } catch (e) {
       // keep saving=false, surface as alert for now
@@ -62,6 +76,15 @@ export function SaveAndColor() {
           >
             {saving ? "Saving…" : "Save design"}
           </button>
+          <button
+            type="button"
+            className="pattern-btn"
+            onClick={() => lastSavedDesignId && handleDownloadPattern(lastSavedDesignId)}
+            disabled={!lastSavedDesignId || patternLoading}
+            title={lastSavedDesignId ? "Download crochet pattern for the last saved design" : "Save a design first"}
+          >
+            {patternLoading ? "Preparing…" : "Download pattern"}
+          </button>
         </div>
       </div>
 
@@ -77,6 +100,16 @@ export function SaveAndColor() {
                   <br />
                   <span className="save-modal-id">ID: {modal.id}</span>
                 </p>
+                <div className="save-modal-actions">
+                  <button
+                    type="button"
+                    className="pattern-btn pattern-btn--primary"
+                    disabled={patternLoading}
+                    onClick={() => handleDownloadPattern(modal.id)}
+                  >
+                    {patternLoading ? "Preparing…" : "Download crochet pattern"}
+                  </button>
+                </div>
               </>
             ) : (
               <>

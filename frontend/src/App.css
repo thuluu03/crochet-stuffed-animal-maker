@@ -272,6 +272,44 @@ body {
   cursor: not-allowed;
 }
 
+.pattern-btn {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: #e8e8e8;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.pattern-btn:hover:not(:disabled) {
+  background: rgba(15, 52, 96, 0.45);
+  border-color: #1a4a7a;
+}
+
+.pattern-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pattern-btn--primary {
+  background: #0f3460;
+  border-color: #1a4a7a;
+  color: #fff;
+}
+
+.pattern-btn--primary:hover:not(:disabled) {
+  background: #1a4a7a;
+}
+
+.save-modal-actions {
+  margin-top: 0.25rem;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 .save-and-color .message {
   margin: 0;
   font-size: 0.85rem;
