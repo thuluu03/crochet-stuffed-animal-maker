@@ -122,22 +122,58 @@ function templateSphere(r: number, rows: number, maxSt: number, color: string): 
 
 function templateCylinder(tubeR: number, height: number, circ: number, hRows: number, color: string): string {
   const approx = Math.round(circ * hRows * 1.05);
-  return [
-    `Suggested yarn color: ${color}`,
-    "",
-    "Worked in the round in a tube (spiral or joined rounds).",
-    "",
-    `Tube radius r ≈ ${tubeR.toFixed(3)}; height ≈ ${height.toFixed(3)}.`,
-    `Target circumference: ~${circ} sc (2πr / stitch width, stitch width ≈ ${STITCH_WIDTH}).`,
-    `Straight section rows: ~${hRows} (height / row height, row height ≈ ${ROW_HEIGHT}).`,
-    "",
-    "Suggested steps:",
-    "1. Start with a flat circle or magic ring; increase each round until the round matches the target circumference.",
-    `2. Work even (no inc/dec) for the straight tube for ~${hRows} rows.`,
-    "3. Close one end before stuffing if this piece should be sealed; leave the attaching end open for sewing to the body.",
-    "",
-    `Approximate total stitches (very rough): ~${approx}.`,
+
+  // round circ to the nearest multiple of 6
+  /**
+   * start with magic ring of 6 stitches 
+   * increase until you reach the target circumference
+   * for one row, sc around [circ] stitches
+   * repeat for [hRows - 1] rows
+   * stuff 
+   * in the back loop, start decreasing 
+   * fasten off 
+   */
+  const circumference = Math.max(1, Math.round(circ / 6) * 6);
+
+  function increase(circumference: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = 0; i < circumference / 6; i++) {
+      lines.push(`(${ `${i} sc,` ? i > 0 : "" }inc) * 6 [${(i + 2) * 6}]`);
+    }
+
+    return lines;
+  }
+
+  function decrease(circumference: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = circumference; i > 0; i -= 6) {
+      const st = (i - 12) / 6;
+      lines.push(`(${ `${st} sc,` ? st > 0 : "" }dec) * 6 [${(st + 2) * 6}]`);
+    }
+
+    return lines;
+  }
+
+  const arrayRange = (start: number, stop: number, step: number): number[] =>
+    Array.from(
+    { length: (stop - start) / step + 1 },
+    (value, index) => start + index * step
+    );
+  
+  let template = [
+    "row 1: 6 sc in magic ring [6]",
+    ...increase(circumference).map((line, i) => `row ${i + 2}: ${line}`),
+    'in blo, sc around',
+    ...arrayRange(circumference / 6 + 1, circumference / 6 + hRows, 1).map((row) => `row ${row}: sc around [${circumference}]`),
+    'in blo, start decreasing',
+    'stuff',
+    ...decrease(circumference).map((line, i) => `row ${circumference / 6 + i + 2}: ${line}`),
+    'fasten off',
   ].join("\n");
+
+  return template;
 }
 
 function templateCone(
