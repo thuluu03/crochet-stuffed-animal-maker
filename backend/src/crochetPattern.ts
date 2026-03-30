@@ -138,8 +138,8 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
   function increase(circumference: number): string[] {
     let lines: string[] = [];
 
-    for (let i = 0; i < circumference / 6; i++) {
-      lines.push(`(${ `${i} sc,` ? i > 0 : "" }inc) * 6 [${(i + 2) * 6}]`);
+    for (let i = 0; i < (circumference / 6) - 1; i++) {
+      lines.push(`(${ i > 0 ? `${i} sc,` : "" }inc) * 6 [${(i + 2) * 6}]`);
     }
 
     return lines;
@@ -148,9 +148,9 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
   function decrease(circumference: number): string[] {
     let lines: string[] = [];
 
-    for (let i = circumference; i > 0; i -= 6) {
+    for (let i = circumference; i > 1; i -= 6) {
       const st = (i - 12) / 6;
-      lines.push(`(${ `${st} sc,` ? st > 0 : "" }dec) * 6 [${(st + 2) * 6}]`);
+      lines.push(`(${ st > 0 ? `${st} sc,` : "" }dec) * 6 [${i - 6}]`);
     }
 
     return lines;
@@ -165,11 +165,11 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
   let template = [
     "row 1: 6 sc in magic ring [6]",
     ...increase(circumference).map((line, i) => `row ${i + 2}: ${line}`),
-    'in blo, sc around',
-    ...arrayRange(circumference / 6 + 1, circumference / 6 + hRows, 1).map((row) => `row ${row}: sc around [${circumference}]`),
-    'in blo, start decreasing',
-    'stuff',
-    ...decrease(circumference).map((line, i) => `row ${circumference / 6 + i + 2}: ${line}`),
+    `row ${circumference / 6 + 1}: in blo, sc around [${circumference}]`,
+    ...arrayRange(circumference / 6 + 2, circumference / 6 + hRows, 1).map((row) => `row ${row}: sc around [${circumference}]`),
+    `row ${circumference / 6 + hRows + 1}: in blo, ${decrease(circumference)[0]}`,
+    'stuff firmly',
+    ...decrease(circumference-6).map((line, i) => `row ${circumference / 6 + i + hRows + 1}: ${line}`),
     'fasten off',
   ].join("\n");
 
