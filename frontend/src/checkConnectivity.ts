@@ -1,6 +1,7 @@
 import type { PlacedPart } from "./types";
 import { MANNEQUIN_SLOTS } from "./presets";
 
+/** Keep in sync with `backend/src/meshDimensions.ts` → `MESH_DIMENSIONS.connectivityRadius`. */
 const MESH_RADIUS: Record<string, number> = {
   "head-sphere": 0.28,
   "head-cylinder": 0.28,

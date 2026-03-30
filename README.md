@@ -37,6 +37,9 @@ Runs at `http://localhost:5173`. Set `VITE_API_URL=http://localhost:3001` if the
 - `POST /api/designs` – Create or update a design (body: `{ name?, parts, finalizedMeshes }`).
 - `GET /api/designs` – List saved designs.
 - `GET /api/designs/:id` – Get one design by id.
+- `GET /api/designs/:id/pattern` – Download a plain-text crochet instruction sheet (`Content-Disposition: attachment`).
+
+Backend tests: `cd backend && npm test`.
 
 ## Tech
 
