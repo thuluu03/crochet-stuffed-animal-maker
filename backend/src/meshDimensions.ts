@@ -1,3 +1,5 @@
+import type { PartScale, Vector3 } from "./types.js";
+
 /**
  * Physical scale hints for pattern generation and assembly adjacency.
  * Keep `CONNECTIVITY_RADIUS_BY_MESH_ID` in sync with
@@ -43,12 +45,29 @@ export const MESH_DIMENSIONS: Record<string, MeshDimensionEntry> = {
 
 const DEFAULT_ENTRY: MeshDimensionEntry = { connectivityRadius: 0.3 };
 
+export function scaleVector(scale: PartScale): Vector3 {
+  if (typeof scale === "number") {
+    return { x: scale, y: scale, z: scale };
+  }
+  return scale;
+}
+
+export function maxScaleFactor(scale: PartScale): number {
+  const { x, y, z } = scaleVector(scale);
+  return Math.max(x, y, z);
+}
+
+export function averageHorizontalScaleFactor(scale: PartScale): number {
+  const { x, z } = scaleVector(scale);
+  return (x + z) / 2;
+}
+
 export function getMeshDimensionEntry(meshId: string): MeshDimensionEntry {
   return MESH_DIMENSIONS[meshId] ?? DEFAULT_ENTRY;
 }
 
-export function getConnectivityRadius(meshId: string, scale: number): number {
-  return getMeshDimensionEntry(meshId).connectivityRadius * scale;
+export function getConnectivityRadius(meshId: string, scale: PartScale): number {
+  return getMeshDimensionEntry(meshId).connectivityRadius * maxScaleFactor(scale);
 }
 
 /** Slot positions — keep in sync with `frontend/src/presets.ts` MANNEQUIN_SLOTS */
@@ -98,10 +117,43 @@ export const MESH_LABELS: Record<string, string> = {
   tail: "Tail",
 };
 
+/** Must match frontend `SEGMENT_COUNT_BY_MESH_ID` for color-change placement. */
+export const SEGMENT_COUNT_BY_MESH_ID: Record<string, number> = {
+  head: 8,
+  "head-sphere": 8,
+  "head-cylinder": 8,
+  "body-sphere": 10,
+  body: 10,
+  "body-cylinder": 10,
+  "body-cone": 10,
+  "limb-sphere": 6,
+  "limb-cylinder": 6,
+  "ear-sphere": 4,
+  "ear-cylinder": 4,
+  ear: 4,
+  "ear-cone": 4,
+  "ear-circle": 4,
+  tail: 6,
+  "body-teardrop": 8,
+  "limb-teardrop": 6,
+  "ear-teardrop": 4,
+  sphere: 8,
+  cylinder: 8,
+  cone: 8,
+  "custom-teardrop": 8,
+  "body-custom-teardrop": 10,
+};
+
+const DEFAULT_SEGMENT_COUNT = 8;
+
 export function slotLabel(slotId: string): string {
   return SLOT_LABELS[slotId] ?? slotId;
 }
 
 export function meshLabel(meshId: string): string {
   return MESH_LABELS[meshId] ?? meshId;
+}
+
+export function getSegmentCount(meshId: string): number {
+  return SEGMENT_COUNT_BY_MESH_ID[meshId] ?? DEFAULT_SEGMENT_COUNT;
 }

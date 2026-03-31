@@ -9,6 +9,8 @@ export interface Vector3 {
   z: number;
 }
 
+export type PartScale = number | Vector3;
+
 export interface DesignPart {
   /** Preset mesh id (e.g. "head", "arm", "leg") */
   meshId: string;
@@ -16,8 +18,8 @@ export interface DesignPart {
   slotId: string;
   /** Position relative to slot */
   position: Vector3;
-  /** Uniform scale */
-  scale: number;
+  /** Per-axis scale; older saved designs may still have a uniform numeric scale */
+  scale: PartScale;
   /** Rotation in radians (euler) */
   rotation: Vector3;
   /** Hex color for the whole part */

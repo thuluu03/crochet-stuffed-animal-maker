@@ -73,7 +73,7 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
         meshId: p.meshId,
         slotId: p.slotId,
         position: { x: p.position[0], y: p.position[1], z: p.position[2] },
-        scale: (p.scale[0] + p.scale[1] + p.scale[2]) / 3,
+        scale: { x: p.scale[0], y: p.scale[1], z: p.scale[2] },
         rotation: { x: p.rotation[0], y: p.rotation[1], z: p.rotation[2] },
         color: p.color,
         rowColors: p.rowColors,

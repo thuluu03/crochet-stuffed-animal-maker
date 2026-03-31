@@ -12,7 +12,7 @@ import type { Design, DesignPart } from "./types.js";
 function part(p: Partial<DesignPart> & Pick<DesignPart, "meshId" | "slotId">): DesignPart {
   return {
     position: { x: 0, y: 0, z: 0 },
-    scale: 1,
+    scale: { x: 1, y: 1, z: 1 },
     rotation: { x: 0, y: 0, z: 0 },
     color: "#c4a574",
     ...p,
@@ -95,6 +95,50 @@ describe("compileCrochetPattern", () => {
     };
     const text = compileCrochetPattern(design);
     expect(text).toMatch(/r ≈ 3\.000/);
+  });
+
+  it("uses an oval chain start when x and z scales differ", () => {
+    const design: Design = {
+      id: "scaled-id",
+      name: "Scaled",
+      parts: [
+        part({
+          meshId: "body-sphere",
+          slotId: "body",
+          scale: { x: 2, y: 1, z: 0.5 },
+        }),
+      ],
+      finalizedMeshes: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const text = compileCrochetPattern(design);
+    expect(text).toContain("radii x ≈ 0.880, y ≈ 0.440, z ≈ 0.220");
+    expect(text).toContain("horizontal radius ≈ 0.550");
+    expect(text).toContain("Suggested row plan: ch 12 oval start, 5 increase, 6 even, 5 decrease");
+    expect(text).toContain("Ch 12; work around both sides of the chain to form an oval start.");
+    expect(text).not.toContain("Magic ring or ch-2 ring");
+  });
+
+  it("adds row-based color switch instructions from segment colors", () => {
+    const design: Design = {
+      id: "color-id",
+      name: "Color Test",
+      parts: [
+        part({
+          meshId: "body-sphere",
+          slotId: "body",
+          rowColors: { 5: "#ff0000" },
+        }),
+      ],
+      finalizedMeshes: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const text = compileCrochetPattern(design);
+    expect(text).toContain("Suggested yarn color: orange (#c4a574)");
+    expect(text).toContain("Rows 7-9: sc around [36]. Change yarn before Row 10 to red (#ff0000).");
+    expect(text).toContain("Rows 10-11: sc around [36]. Change yarn before Row 12 to orange (#c4a574).");
   });
 });
 

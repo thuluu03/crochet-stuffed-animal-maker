@@ -39,7 +39,7 @@ export interface DesignPayload {
     meshId: string;
     slotId: string;
     position: { x: number; y: number; z: number };
-    scale: number;
+    scale: { x: number; y: number; z: number };
     rotation: { x: number; y: number; z: number };
     color: string;
     rowColors?: Record<number, string>;

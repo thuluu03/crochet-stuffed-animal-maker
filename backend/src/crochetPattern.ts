@@ -2,10 +2,13 @@ import type { Design, DesignPart, StoredMesh } from "./types.js";
 import {
   ROW_HEIGHT,
   STITCH_WIDTH,
+  averageHorizontalScaleFactor,
   getConnectivityRadius,
   getMeshDimensionEntry,
+  getSegmentCount,
   meshLabel,
   MANNEQUIN_SLOT_POSITIONS,
+  scaleVector,
   slotLabel,
 } from "./meshDimensions.js";
 
@@ -27,15 +30,24 @@ function sortKey(slotId: string): number {
 
 function partWorldCenter(part: DesignPart): [number, number, number] {
   const sp = MANNEQUIN_SLOT_POSITIONS[part.slotId] ?? [0, 0, 0];
-  return [sp[0] + part.position.x, sp[1] + part.position.y, sp[2] + part.position.z];
+  return [
+    sp[0] + part.position.x,
+    sp[1] + part.position.y,
+    sp[2] + part.position.z,
+  ];
 }
 
-function dist3(a: [number, number, number], b: [number, number, number]): number {
+function dist3(
+  a: [number, number, number],
+  b: [number, number, number],
+): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
 /** Bounding-sphere radius from flattened xyz points; null if insufficient data. */
-export function boundingSphereRadiusFromPoints(points: number[]): number | null {
+export function boundingSphereRadiusFromPoints(
+  points: number[],
+): number | null {
   if (points.length < 9) return null;
   const n = points.length / 3;
   let cx = 0;
@@ -51,10 +63,39 @@ export function boundingSphereRadiusFromPoints(points: number[]): number | null 
   cz /= n;
   let maxD = 0;
   for (let i = 0; i < points.length; i += 3) {
-    const d = Math.hypot(points[i] - cx, points[i + 1] - cy, points[i + 2] - cz);
+    const d = Math.hypot(
+      points[i] - cx,
+      points[i + 1] - cy,
+      points[i + 2] - cz,
+    );
     if (d > maxD) maxD = d;
   }
   return maxD;
+}
+
+function halfExtentsFromPoints(
+  points: number[],
+): { x: number; y: number; z: number } | null {
+  if (points.length < 9) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < points.length; i += 3) {
+    minX = Math.min(minX, points[i]);
+    minY = Math.min(minY, points[i + 1]);
+    minZ = Math.min(minZ, points[i + 2]);
+    maxX = Math.max(maxX, points[i]);
+    maxY = Math.max(maxY, points[i + 1]);
+    maxZ = Math.max(maxZ, points[i + 2]);
+  }
+  return {
+    x: (maxX - minX) / 2,
+    y: (maxY - minY) / 2,
+    z: (maxZ - minZ) / 2,
+  };
 }
 
 function clampStitches(n: number, min = 6): number {
@@ -69,7 +110,9 @@ export function rowsForLength(length: number): number {
   return Math.max(1, Math.round(length / ROW_HEIGHT));
 }
 
-function shapeFamily(meshId: string): "sphere" | "cylinder" | "cone" | "teardrop" {
+function shapeFamily(
+  meshId: string,
+): "sphere" | "cylinder" | "cone" | "teardrop" {
   if (meshId.includes("teardrop")) return "teardrop";
   if (meshId.includes("cone")) return "cone";
   if (meshId.includes("cylinder")) return "cylinder";
@@ -81,17 +124,180 @@ function colorHint(mesh: StoredMesh | undefined, part: DesignPart): string {
   return c || "(use your chosen main color)";
 }
 
-function effectiveSphereRadius(
-  mesh: StoredMesh | undefined,
-  part: DesignPart,
-  scale: number
-): number {
-  const fromMesh = mesh ? boundingSphereRadiusFromPoints(mesh.points) : null;
-  if (fromMesh != null && fromMesh > 0) return fromMesh;
-  return getMeshDimensionEntry(part.meshId).connectivityRadius * scale;
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.trim().toLowerCase();
+  const match = normalized.match(/^#?([0-9a-f]{6})$/);
+  if (!match) return null;
+  const value = parseInt(match[1], 16);
+  return {
+    r: (value >> 16) & 0xff,
+    g: (value >> 8) & 0xff,
+    b: value & 0xff,
+  };
 }
 
-function meshForSlot(meshes: StoredMesh[], slotId: string): StoredMesh | undefined {
+function describeColor(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+
+  let hue = 0;
+  if (delta !== 0) {
+    if (max === r) hue = ((g - b) / delta) % 6;
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+  }
+
+  const saturation =
+    delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+
+  let base = "gray";
+  if (saturation < 0.12) {
+    if (lightness < 0.12) base = "black";
+    else if (lightness > 0.88) base = "white";
+    else base = "gray";
+  } else if (hue < 15 || hue >= 345) {
+    base = "red";
+  } else if (hue < 45) {
+    base = "orange";
+  } else if (hue < 70) {
+    base = "yellow";
+  } else if (hue < 155) {
+    base = "green";
+  } else if (hue < 190) {
+    base = "teal";
+  } else if (hue < 255) {
+    base = "blue";
+  } else if (hue < 320) {
+    base = "purple";
+  } else {
+    base = "pink";
+  }
+
+  let prefix = "";
+  if (base !== "black" && base !== "white") {
+    if (lightness < 0.35) prefix = "dark ";
+    else if (lightness > 0.72) prefix = "light ";
+  }
+
+  return `${prefix}${base} (${hex})`;
+}
+
+type ColorRun = {
+  startRow: number;
+  endRow: number;
+  color: string;
+};
+
+function buildColorRuns(
+  part: DesignPart,
+  baseColor: string,
+  totalRows: number,
+): ColorRun[] {
+  const segmentCount = getSegmentCount(part.meshId);
+  if (segmentCount <= 0 || totalRows <= 0) {
+    return [{ startRow: 1, endRow: totalRows, color: baseColor }];
+  }
+
+  const colorForSegment = (segmentIndex: number): string =>
+    part.rowColors?.[segmentIndex] ?? baseColor;
+
+  const runs: ColorRun[] = [];
+  for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++) {
+    const startRow = Math.floor((segmentIndex * totalRows) / segmentCount) + 1;
+    const endRow = Math.floor(((segmentIndex + 1) * totalRows) / segmentCount);
+    if (startRow > totalRows || endRow < startRow) continue;
+    const color = colorForSegment(segmentIndex);
+    const previousRun = runs[runs.length - 1];
+    if (
+      previousRun &&
+      previousRun.color === color &&
+      previousRun.endRow + 1 >= startRow
+    ) {
+      previousRun.endRow = endRow;
+      continue;
+    }
+    runs.push({ startRow, endRow, color });
+  }
+
+  if (runs.length === 0) {
+    return [{ startRow: 1, endRow: totalRows, color: baseColor }];
+  }
+  return runs;
+}
+
+function rowLabel(startRow: number, endRow: number): string {
+  return startRow === endRow ? `Row ${startRow}` : `Rows ${startRow}-${endRow}`;
+}
+
+function lineWithInlineColorChanges(
+  startRow: number,
+  endRow: number,
+  text: string,
+  colorRuns: ColorRun[],
+): string[] {
+  const relevantRuns = colorRuns.filter(
+    (run) => run.endRow >= startRow && run.startRow <= endRow,
+  );
+  if (relevantRuns.length === 0) {
+    return [`${rowLabel(startRow, endRow)}: ${text}`];
+  }
+
+  return relevantRuns.map((run, index) => {
+    const segmentStart = Math.max(startRow, run.startRow);
+    const segmentEnd = Math.min(
+      endRow,
+      index < relevantRuns.length - 1
+        ? relevantRuns[index + 1].startRow - 1
+        : run.endRow,
+    );
+    const nextRun = relevantRuns[index + 1];
+    const suffix =
+      nextRun && nextRun.startRow <= endRow
+        ? `. Change yarn before Row ${nextRun.startRow} to ${describeColor(nextRun.color)}.`
+        : "";
+    return `${rowLabel(segmentStart, segmentEnd)}: ${text}${suffix}`;
+  });
+}
+
+function effectiveSphereDimensions(
+  mesh: StoredMesh | undefined,
+  part: DesignPart,
+): { x: number; y: number; z: number; horizontalRadius: number } {
+  const fromMesh = mesh ? halfExtentsFromPoints(mesh.points) : null;
+  if (fromMesh) {
+    return {
+      ...fromMesh,
+      horizontalRadius: (fromMesh.x + fromMesh.z) / 2,
+    };
+  }
+
+  const baseRadius = getMeshDimensionEntry(part.meshId).connectivityRadius;
+  const scale = scaleVector(part.scale);
+  const x = baseRadius * scale.x;
+  const y = baseRadius * scale.y;
+  const z = baseRadius * scale.z;
+  return {
+    x,
+    y,
+    z,
+    horizontalRadius: (x + z) / 2,
+  };
+}
+
+function meshForSlot(
+  meshes: StoredMesh[],
+  slotId: string,
+): StoredMesh | undefined {
   return meshes.find((m) => m.slotId === slotId);
 }
 
@@ -99,47 +305,121 @@ function partSectionTitle(part: DesignPart): string {
   return `${slotLabel(part.slotId)} — ${meshLabel(part.meshId)}`;
 }
 
-function templateSphere(r: number, rows: number, maxSt: number, color: string): string {
-  const approx = Math.round(rows * ((6 + maxSt) / 2) * 0.85);
-  return [
-    `Suggested yarn color: ${color}`,
-    "",
-    "Worked in the round (amigurumi style). All stitches are single crochet (sc) unless noted.",
-    "",
-    `Estimated size: characteristic radius r ≈ ${r.toFixed(3)} (same units as the design).`,
-    `Target largest round: ~${maxSt} sc in circumference (from 2πr / stitch width, stitch width ≈ ${STITCH_WIDTH}).`,
-    `Approximate shaping rows for a sphere: ${rows} (from 2r / row height, row height ≈ ${ROW_HEIGHT}).`,
-    "",
-    "Suggested shaping (adjust to your gauge):",
-    "1. Magic ring or ch-2 ring: Rnd 1 — 6 sc in ring. (6)",
-    `2. Increase evenly each round until you reach ~${maxSt} sts (distribute increases so the piece stays roughly spherical).`,
-    "3. Work even for a short section at the widest part if you want a rounder belly/head.",
-    "4. Decrease evenly, mirroring the increase rounds, until the opening is small; stuff firmly before closing.",
-    "",
-    `Approximate total stitches (very rough): ~${approx}.`,
-  ].join("\n");
+function templateSphere(
+  dims: { x: number; y: number; z: number; horizontalRadius: number },
+  increaseRows: number,
+  regularRows: number,
+  maxSt: number,
+  color: string,
+  colorRuns: ColorRun[],
+  start: { type: "magic-ring" } | { type: "chain-oval"; chainCount: number },
+): string {
+  const decreaseRows = increaseRows;
+  const widestRowCount = 6 + (increaseRows - 1) * 6;
+
+  function increase(numIncRows: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = 0; i < numIncRows; i++) {
+      lines.push(`(${i > 0 ? `${i} sc,` : ""} inc) * 6 [${(i + 2) * 6}]`);
+    }
+
+    return lines;
+  }
+
+  function decrease(numDecRows: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = numDecRows - 1; i > 0; i--) {
+      lines.push(`(${i} sc, dec) * 6 [${(i + 1) * 6}]`);
+    }
+
+    return lines;
+  }
+
+  const lines: string[] = [
+    `Suggested yarn color: ${describeColor(colorRuns[0]?.color ?? color)}`,
+  ];
+
+  if (start.type === "magic-ring") {
+    lines.push(
+      ...lineWithInlineColorChanges(1, 1, "6 sc in magic ring [6]", colorRuns),
+    );
+  } else {
+    lines.push(
+      ...lineWithInlineColorChanges(
+        1,
+        1,
+        `Ch ${start.chainCount}; work around both sides of the chain to form an oval start.`,
+        colorRuns,
+      ),
+    );
+  }
+
+  lines.push(
+    ...increase(increaseRows - 1).flatMap((line, i) =>
+      lineWithInlineColorChanges(i + 2, i + 2, line, colorRuns),
+    ),
+  );
+  lines.push(
+    ...lineWithInlineColorChanges(
+      increaseRows + 1,
+      increaseRows + regularRows + 1,
+      `sc around [${widestRowCount}]`,
+      colorRuns,
+    ),
+  );
+  lines.push(
+    ...decrease(decreaseRows - 1).flatMap((line, i) =>
+      lineWithInlineColorChanges(
+        increaseRows + regularRows + 2 + i,
+        increaseRows + regularRows + 2 + i,
+        line,
+        colorRuns,
+      ),
+    ),
+  );
+  lines.push("Stuff firmly.");
+  lines.push(
+    ...lineWithInlineColorChanges(
+      increaseRows + regularRows + decreaseRows,
+      increaseRows + regularRows + decreaseRows,
+      "(dec) * 6 [6]",
+      colorRuns,
+    ),
+  );
+  lines.push("Weave closed and fasten off, leaving a long tail for sewing.");
+
+  return lines.join("\n");
 }
 
-function templateCylinder(tubeR: number, height: number, circ: number, hRows: number, color: string): string {
+function templateCylinder(
+  tubeR: number,
+  height: number,
+  circ: number,
+  hRows: number,
+  color: string,
+  colorRuns: ColorRun[],
+): string {
   const approx = Math.round(circ * hRows * 1.05);
 
   // round circ to the nearest multiple of 6
   /**
-   * start with magic ring of 6 stitches 
+   * start with magic ring of 6 stitches
    * increase until you reach the target circumference
    * for one row, sc around [circ] stitches
    * repeat for [hRows - 1] rows
-   * stuff 
-   * in the back loop, start decreasing 
-   * fasten off 
+   * stuff
+   * in the back loop, start decreasing
+   * fasten off
    */
   const circumference = Math.max(1, Math.round(circ / 6) * 6);
 
   function increase(circumference: number): string[] {
     let lines: string[] = [];
 
-    for (let i = 0; i < (circumference / 6) - 1; i++) {
-      lines.push(`(${ i > 0 ? `${i} sc,` : "" }inc) * 6 [${(i + 2) * 6}]`);
+    for (let i = 0; i < circumference / 6 - 1; i++) {
+      lines.push(`(${i > 0 ? `${i} sc, ` : ""}inc) * 6 [${(i + 2) * 6}]`);
     }
 
     return lines;
@@ -148,32 +428,57 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
   function decrease(circumference: number): string[] {
     let lines: string[] = [];
 
-    for (let i = circumference; i > 1; i -= 6) {
+    for (let i = circumference; i > 12; i -= 6) {
       const st = (i - 12) / 6;
-      lines.push(`(${ st > 0 ? `${st} sc,` : "" }dec) * 6 [${i - 6}]`);
+      lines.push(`(${st > 0 ? `${st} sc, ` : ""}dec) * 6 [${i - 6}]`);
     }
 
     return lines;
   }
 
-  const arrayRange = (start: number, stop: number, step: number): number[] =>
-    Array.from(
-    { length: (stop - start) / step + 1 },
-    (value, index) => start + index * step
-    );
-  
-  let template = [
-    "row 1: 6 sc in magic ring [6]",
-    ...increase(circumference).map((line, i) => `row ${i + 2}: ${line}`),
-    `row ${circumference / 6 + 1}: in blo, sc around [${circumference}]`,
-    ...arrayRange(circumference / 6 + 2, circumference / 6 + hRows, 1).map((row) => `row ${row}: sc around [${circumference}]`),
-    `row ${circumference / 6 + hRows + 1}: in blo, ${decrease(circumference)[0]}`,
-    'stuff firmly',
-    ...decrease(circumference-6).map((line, i) => `row ${circumference / 6 + i + hRows + 1}: ${line}`),
-    'fasten off',
-  ].join("\n");
+  const lines: string[] = [
+    `Suggested yarn color: ${describeColor(colorRuns[0]?.color ?? color)}`,
+    ...lineWithInlineColorChanges(1, 1, "6 sc in magic ring [6]", colorRuns),
+    ...increase(circumference).flatMap((line, i) =>
+      lineWithInlineColorChanges(i + 2, i + 2, line, colorRuns),
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + 1,
+      circumference / 6 + 1,
+      `in blo, sc around [${circumference}]`,
+      colorRuns,
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + 2,
+      circumference / 6 + hRows,
+      `in blo, sc around [${circumference}]`,
+      colorRuns,
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + hRows + 1,
+      circumference / 6 + hRows + 1,
+      `in blo, ${decrease(circumference)[0]}`,
+      colorRuns,
+    ),
+    ...decrease(circumference - 6).flatMap((line, i) =>
+      lineWithInlineColorChanges(
+        circumference / 6 + hRows + 2 + i,
+        circumference / 6 + hRows + 2 + i,
+        line,
+        colorRuns,
+      ),
+    ),
+    "Stuff firmly.",
+    ...lineWithInlineColorChanges(
+      circumference / 6 + hRows + 2 + Math.floor((circumference - 12) / 6) - 1,
+      circumference / 6 + hRows + 2 + Math.floor((circumference - 12) / 6) - 1,
+      "(dec) * 6 [6]",
+      colorRuns,
+    ),
+    "Weave closed and fasten off, leaving a long tail for sewing.",
+  ];
 
-  return template;
+  return lines.join("\n");
 }
 
 function templateCone(
@@ -181,7 +486,7 @@ function templateCone(
   height: number,
   stBase: number,
   rows: number,
-  color: string
+  color: string,
 ): string {
   const stTip = clampStitches(stBase * 0.15);
   const approx = Math.round(((stBase + stTip) / 2) * rows);
@@ -203,66 +508,155 @@ function templateCone(
 }
 
 function templateTeardrop(
-  rMax: number,
+  tubeR: number,
   height: number,
-  stMax: number,
-  rows: number,
-  color: string
+  circ: number,
+  hRows: number,
+  color: string,
+  colorRuns: ColorRun[],
 ): string {
-  const stMin = clampStitches(stMax * 0.2);
-  const approx = Math.round(((stMax + stMin) / 2) * rows);
-  return [
-    `Suggested yarn color: ${color}`,
-    "",
-    "Teardrop / rounded taper: wide at one end, narrow at the other.",
-    "",
-    `Max radius ≈ ${rMax.toFixed(3)}; length ≈ ${height.toFixed(3)}.`,
-    `Largest round ~${stMax} sc; narrow end ~${stMin} sc; ~${rows} rows along the length.`,
-    "",
-    "Suggested steps:",
-    "1. Start at the narrow or wide end (your preference); work in spiral rounds.",
-    "2. Increase or decrease evenly row-to-row so the circumference follows the teardrop profile.",
-    "3. Stuff before closing the final opening.",
-    "",
-    `Approximate total stitches (very rough): ~${approx}.`,
-  ].join("\n");
+  const circumference = Math.max(1, Math.round(circ / 6) * 6);
+
+  function increase(circumference: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = 0; i < circumference / 6 - 1; i++) {
+      lines.push(`(${i > 0 ? `${i} sc, ` : ""}inc) * 6 [${(i + 2) * 6}]`);
+    }
+
+    return lines;
+  }
+
+  function decrease(circumference: number): string[] {
+    let lines: string[] = [];
+
+    for (let i = circumference; i > 12; i -= 6) {
+      const st = (i - 12) / 6;
+      lines.push(`(${st > 0 ? `${st} sc, ` : ""}dec) * 6 [${i - 6}]`);
+    }
+
+    return lines;
+  }
+
+  const lines: string[] = [
+    `Suggested yarn color: ${describeColor(colorRuns[0]?.color ?? color)}`,
+    ...lineWithInlineColorChanges(1, 1, "6 sc in magic ring [6]", colorRuns),
+    ...increase(circumference).flatMap((line, i) =>
+      lineWithInlineColorChanges(i + 2, i + 2, line, colorRuns),
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + 1,
+      circumference / 6 + 1,
+      `sc around [${circumference}]`,
+      colorRuns,
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + 2,
+      circumference / 6 + hRows,
+      `sc around [${circumference}]`,
+      colorRuns,
+    ),
+    ...lineWithInlineColorChanges(
+      circumference / 6 + hRows + 1,
+      circumference / 6 + hRows + 1,
+      `${decrease(circumference)[0]}`,
+      colorRuns,
+    ),
+    ...decrease(circumference - 6).flatMap((line, i) =>
+      lineWithInlineColorChanges(
+        circumference / 6 + hRows + 2 + i,
+        circumference / 6 + hRows + 2 + i,
+        line,
+        colorRuns,
+      ),
+    ),
+    "Stuff to liking, recommended lightly for a softer curve.",
+    ...lineWithInlineColorChanges(
+      circumference / 6 + hRows + 2 + Math.floor((circumference - 12) / 6) - 1,
+      circumference / 6 + hRows + 2 + Math.floor((circumference - 12) / 6) - 1,
+      "(dec) * 6 [6]",
+      colorRuns,
+    ),
+    "Leave open and fasten off, leaving a long tail for sewing.",
+  ];
+
+  return lines.join("\n");
 }
 
-function partPatternBody(part: DesignPart, mesh: StoredMesh | undefined): string {
-  const scale = part.scale;
+function partPatternBody(
+  part: DesignPart,
+  mesh: StoredMesh | undefined,
+): string {
+  const scale = scaleVector(part.scale);
   const dim = getMeshDimensionEntry(part.meshId);
   const family = shapeFamily(part.meshId);
   const color = colorHint(mesh, part);
 
   if (family === "cylinder") {
-    const tubeR = (dim.tubeRadius ?? dim.connectivityRadius) * scale;
-    const height = (dim.height ?? dim.connectivityRadius * 2) * scale;
+    const tubeR =
+      (dim.tubeRadius ?? dim.connectivityRadius) *
+      averageHorizontalScaleFactor(scale);
+    const height = (dim.height ?? dim.connectivityRadius * 2) * scale.y;
     const circ = stitchesForCircumference(tubeR);
     const hRows = rowsForLength(height);
-    return templateCylinder(tubeR, height, circ, hRows, color);
+    const circumference = Math.max(1, Math.round(circ / 6) * 6);
+    const totalRows =
+      1 + (circumference / 6 - 1) + hRows + (circumference / 6 - 1) + 1;
+    const colorRuns = buildColorRuns(part, color, totalRows);
+    return templateCylinder(tubeR, height, circ, hRows, color, colorRuns);
   }
 
   if (family === "cone") {
-    const rBase = (dim.tubeRadius ?? dim.connectivityRadius * 0.35) * scale;
-    const height = (dim.height ?? dim.connectivityRadius * 1.2) * scale;
+    const rBase =
+      (dim.tubeRadius ?? dim.connectivityRadius * 0.35) *
+      averageHorizontalScaleFactor(scale);
+    const height = (dim.height ?? dim.connectivityRadius * 1.2) * scale.y;
     const stBase = stitchesForCircumference(rBase);
     const rows = rowsForLength(height);
     return templateCone(rBase, height, stBase, rows, color);
   }
 
   if (family === "teardrop") {
-    const rMax = effectiveSphereRadius(mesh, part, scale);
-    const heightRaw = dim.height ?? dim.connectivityRadius * 2;
-    const height = heightRaw * scale;
-    const stMax = stitchesForCircumference(rMax);
-    const rows = rowsForLength(height);
-    return templateTeardrop(rMax, height, stMax, rows, color);
+    const tubeR =
+      (dim.tubeRadius ?? dim.connectivityRadius) *
+      averageHorizontalScaleFactor(scale);
+    const height = (dim.height ?? dim.connectivityRadius * 2) * scale.y;
+    const circ = stitchesForCircumference(tubeR);
+    const hRows = rowsForLength(height);
+    const circumference = Math.max(1, Math.round(circ / 6) * 6);
+    const totalRows =
+      1 + (circumference / 6 - 1) + hRows + (circumference / 6 - 1) + 1;
+    const colorRuns = buildColorRuns(part, color, totalRows);
+    return templateTeardrop(tubeR, height, circ, hRows, color, colorRuns);
   }
 
-  const r = effectiveSphereRadius(mesh, part, scale);
-  const rows = Math.max(1, rowsForLength(2 * r));
-  const maxSt = stitchesForCircumference(r);
-  return templateSphere(r, rows, maxSt, color);
+  const dims = effectiveSphereDimensions(mesh, part);
+  const largerHorizontalScale = Math.max(scale.x, scale.z);
+  const smallerHorizontalScale = Math.min(scale.x, scale.z);
+  const increaseRows = Math.max(
+    1,
+    Math.round(7 * Math.sqrt(smallerHorizontalScale) - 1),
+  );
+  const regularRows = Math.max(1, Math.round((increaseRows + 1) * scale.y));
+  const maxSt = stitchesForCircumference(dims.horizontalRadius);
+  const isRoundHorizontal = Math.abs(scale.x - scale.z) < 0.001;
+  const start = isRoundHorizontal
+    ? { type: "magic-ring" as const }
+    : {
+        type: "chain-oval" as const,
+        chainCount: Math.max(6, Math.round(6 * largerHorizontalScale)),
+      };
+  const totalRows = increaseRows + regularRows + increaseRows;
+  const colorRuns = buildColorRuns(part, color, totalRows);
+  return templateSphere(
+    dims,
+    increaseRows,
+    regularRows,
+    maxSt,
+    color,
+    colorRuns,
+    start,
+  );
 }
 
 export function buildAssemblySection(parts: DesignPart[]): string {
@@ -318,14 +712,15 @@ export function buildAssemblySection(parts: DesignPart[]): string {
     "SEWING / ASSEMBLY",
     "=================",
     "",
-    "Join pieces by sewing unless you prefer another strong join. Use yarn and a tapestry needle;",
-    "whip stitch or mattress stitch along the mating edges. Match right sides out unless you prefer",
-    "seaming inside-out then turning (not typical for amigurumi).",
+    "Join pieces by sewing using yarn and a tapestry needle. Use a",
+    "whip stitch or mattress stitch along the edges for best results.",
     "",
   ];
 
   if (treeEdges.length === 0) {
-    lines.push("No overlapping parts were detected — check spacing in the design before sewing.");
+    lines.push(
+      "No overlapping parts were detected — check spacing in the design before sewing.",
+    );
     lines.push("");
   } else {
     lines.push("Suggested order (from the main body outward):");
@@ -333,15 +728,15 @@ export function buildAssemblySection(parts: DesignPart[]): string {
     for (const [parent, child] of treeEdges) {
       const a = partSectionTitle(parts[parent]);
       const b = partSectionTitle(parts[child]);
-      lines.push(
-        `• Sew "${b}" to "${a}" along the joining edge, easing the openings so the limbs/head/ears sit naturally.`
-      );
+      lines.push(`• Sew ${b} to ${a}.`);
     }
     lines.push("");
   }
 
   if (isolated.length > 0) {
-    lines.push("Note: these parts were not detected as touching the connected group (adjust placement or sew anyway):");
+    lines.push(
+      "Note: these parts were not detected as touching the connected group (adjust placement or sew anyway):",
+    );
     for (const label of isolated) {
       lines.push(`  – ${label}`);
     }
@@ -375,7 +770,9 @@ function header(design: Design): string {
 
 export function compileCrochetPattern(design: Design): string {
   const meshes = design.finalizedMeshes ?? [];
-  const sortedParts = [...design.parts].sort((a, b) => sortKey(a.slotId) - sortKey(b.slotId));
+  const sortedParts = [...design.parts].sort(
+    (a, b) => sortKey(a.slotId) - sortKey(b.slotId),
+  );
 
   const blocks: string[] = [header(design)];
 
@@ -396,8 +793,14 @@ export function compileCrochetPattern(design: Design): string {
 }
 
 /** Safe filename stem for Content-Disposition (no path chars). */
-export function patternAttachmentFilename(design: Pick<Design, "id" | "name">): string {
-  const raw = design.name?.trim().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/^-+|-+$/g, "");
+export function patternAttachmentFilename(
+  design: Pick<Design, "id" | "name">,
+): string {
+  const raw = design.name
+    ?.trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "");
   const stem = raw && raw.length > 0 ? raw.slice(0, 60) : design.id;
   return `${stem}-crochet-pattern.txt`;
 }
