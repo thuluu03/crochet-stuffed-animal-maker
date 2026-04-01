@@ -9,6 +9,14 @@
 export const STITCH_WIDTH = 0.06;
 export const ROW_HEIGHT = 0.05;
 
+/** Pattern defaults for the generic spawned cone */
+export const DEFAULT_CONE_BASE_CIRCUMFERENCE = 30;
+export const DEFAULT_CONE_INC_SPACING = 1;
+
+function radiusForStitchCount(stitches: number): number {
+  return (stitches * STITCH_WIDTH) / (2 * Math.PI);
+}
+
 export interface MeshDimensionEntry {
   connectivityRadius: number;
   /** Vertical extent for cylinders/cones/teardrops (pattern rows) */
@@ -30,13 +38,17 @@ export const MESH_DIMENSIONS: Record<string, MeshDimensionEntry> = {
   "limb-teardrop": { connectivityRadius: 0.3, height: 0.48, tubeRadius: 0.14 },
   "ear-sphere": { connectivityRadius: 0.1 },
   "ear-cylinder": { connectivityRadius: 0.14, height: 0.22, tubeRadius: 0.08 },
-  "ear-cone": { connectivityRadius: 0.2, height: 0.28, tubeRadius: 0.08 },
+  "ear-cone": { connectivityRadius: 0.2, height: 0.56, tubeRadius: 0.145 },
   "ear-circle": { connectivityRadius: 0.14, height: 0.06, tubeRadius: 0.14 },
   "ear-teardrop": { connectivityRadius: 0.2, height: 0.24, tubeRadius: 0.1 },
   tail: { connectivityRadius: 0.2, height: 0.35, tubeRadius: 0.08 },
   sphere: { connectivityRadius: 0.24 },
   cylinder: { connectivityRadius: 0.28, height: 0.48, tubeRadius: 0.26 },
-  cone: { connectivityRadius: 0.28, height: 0.45, tubeRadius: 0.1 },
+  cone: {
+    connectivityRadius: 0.28,
+    height: 0.90,
+    tubeRadius: radiusForStitchCount(DEFAULT_CONE_BASE_CIRCUMFERENCE),
+  },
   "custom-teardrop": { connectivityRadius: 0.4, height: 0.65, tubeRadius: 0.18 },
   "body-custom-teardrop": { connectivityRadius: 0.44, height: 0.72, tubeRadius: 0.2 },
 };

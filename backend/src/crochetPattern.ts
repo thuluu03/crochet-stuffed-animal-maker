@@ -2,6 +2,7 @@ import type { Design, DesignPart, StoredMesh } from "./types.js";
 import {
   ROW_HEIGHT,
   STITCH_WIDTH,
+  DEFAULT_CONE_BASE_CIRCUMFERENCE,
   getConnectivityRadius,
   getMeshDimensionEntry,
   meshLabel,
@@ -99,25 +100,54 @@ function partSectionTitle(part: DesignPart): string {
   return `${slotLabel(part.slotId)} — ${meshLabel(part.meshId)}`;
 }
 
-function templateSphere(r: number, rows: number, maxSt: number, color: string): string {
-  const approx = Math.round(rows * ((6 + maxSt) / 2) * 0.85);
-  return [
-    `Suggested yarn color: ${color}`,
-    "",
-    "Worked in the round (amigurumi style). All stitches are single crochet (sc) unless noted.",
-    "",
-    `Estimated size: characteristic radius r ≈ ${r.toFixed(3)} (same units as the design).`,
-    `Target largest round: ~${maxSt} sc in circumference (from 2πr / stitch width, stitch width ≈ ${STITCH_WIDTH}).`,
-    `Approximate shaping rows for a sphere: ${rows} (from 2r / row height, row height ≈ ${ROW_HEIGHT}).`,
-    "",
-    "Suggested shaping (adjust to your gauge):",
-    "1. Magic ring or ch-2 ring: Rnd 1 — 6 sc in ring. (6)",
-    `2. Increase evenly each round until you reach ~${maxSt} sts (distribute increases so the piece stays roughly spherical).`,
-    "3. Work even for a short section at the widest part if you want a rounder belly/head.",
-    "4. Decrease evenly, mirroring the increase rounds, until the opening is small; stuff firmly before closing.",
-    "",
-    `Approximate total stitches (very rough): ~${approx}.`,
-  ].join("\n");
+function templateSphere(rows: number, maxSt: number, color: string): string {
+  const circumference = Math.max(6, Math.round(maxSt / 6) * 6);
+  const steps = circumference / 6 - 1; // increase rounds (and matching decrease rounds)
+  const middleRows = Math.max(0, rows - 1 - steps * 2);
+
+  const lines: string[] = [];
+  lines.push(`Color: ${color}`);
+  lines.push("");
+
+  let r2 = 1;
+  let circ = 6;
+  lines.push(`Row ${r2}: 6 sc in magic ring [6]`);
+  r2++;
+
+  // increases
+  for (let i = 0; i < steps; i++) {
+    circ += 6;
+    const inst = i === 0 ? `inc * 6` : `(${i} sc, inc) * 6`;
+    lines.push(`Row ${r2}: ${inst} [${circ}]`);
+    r2++;
+  }
+
+  // middle plain rows
+  if (middleRows === 1) {
+    lines.push(`Row ${r2}: sc around [${circ}]`);
+    r2++;
+  } else if (middleRows > 1) {
+    lines.push(`Rows ${r2}-${r2 + middleRows - 1}: sc around [${circ}]`);
+    r2 += middleRows;
+  }
+
+  // decreases
+  for (let i = steps - 1; i >= 0; i--) {
+    const inst = i === 0 ? `dec * 6` : `(${i} sc, dec) * 6`;
+    if (i === steps - 1) {
+      lines.push(`Row ${r2}: ${inst} [${circ - 6}]`);
+      r2++;
+      lines.push("Stuff firmly.");
+    } else {
+      circ -= 6;
+      lines.push(`Row ${r2}: ${inst} [${circ}]`);
+      r2++;
+    }
+    circ -= 6;
+  }
+
+  lines.push("Weave closed and fasten off, leaving a long tail for sewing.");
+  return lines.join("\n");
 }
 
 function templateCylinder(tubeR: number, height: number, circ: number, hRows: number, color: string): string {
@@ -163,13 +193,15 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
     );
   
   let template = [
-    "row 1: 6 sc in magic ring [6]",
-    ...increase(circumference).map((line, i) => `row ${i + 2}: ${line}`),
-    `row ${circumference / 6 + 1}: in blo, sc around [${circumference}]`,
-    ...arrayRange(circumference / 6 + 2, circumference / 6 + hRows, 1).map((row) => `row ${row}: sc around [${circumference}]`),
-    `row ${circumference / 6 + hRows + 1}: in blo, ${decrease(circumference)[0]}`,
+    `Color: ${color}`,
+    "",
+    "Row 1: 6 sc in magic ring [6]",
+    ...increase(circumference).map((line, i) => `Row ${i + 2}: ${line}`),
+    `Row ${circumference / 6 + 1}: in blo, sc around [${circumference}]`,
+    ...arrayRange(circumference / 6 + 2, circumference / 6 + hRows, 1).map((row) => `Row ${row}: sc around [${circumference}]`),
+    `Row ${circumference / 6 + hRows + 1}: in blo, ${decrease(circumference)[0]}`,
     'stuff firmly',
-    ...decrease(circumference-6).map((line, i) => `row ${circumference / 6 + i + hRows + 1}: ${line}`),
+    ...decrease(circumference-6).map((line, i) => `Row ${circumference / 6 + i + hRows + 1}: ${line}`),
     'fasten off',
   ].join("\n");
 
@@ -177,29 +209,60 @@ function templateCylinder(tubeR: number, height: number, circ: number, hRows: nu
 }
 
 function templateCone(
-  rBase: number,
-  height: number,
   stBase: number,
   rows: number,
   color: string
 ): string {
-  const stTip = clampStitches(stBase * 0.15);
-  const approx = Math.round(((stBase + stTip) / 2) * rows);
-  return [
-    `Suggested yarn color: ${color}`,
-    "",
-    "Cone shape: start at the wide base and decrease toward the tip.",
-    "",
-    `Base radius ≈ ${rBase.toFixed(3)}; height ≈ ${height.toFixed(3)}.`,
-    `Base round ~${stBase} sc; tip target ~${stTip} sc; ~${rows} shaping rows.`,
-    "",
-    "Suggested steps:",
-    `1. Begin with a round of ~${stBase} sc (magic ring + increases, or chain ring).`,
-    "2. Each row, decrease evenly while maintaining a smooth cone until a small opening remains at the tip.",
-    "3. Stuff lightly if needed; close the tip or leave a yarn tail for sewing.",
-    "",
-    `Approximate total stitches (very rough): ~${approx}.`,
-  ].join("\n");
+  const circumference = Math.max(6, Math.round(stBase / 6) * 6);
+  const steps = Math.max(1, circumference / 6 - 1);
+
+  const coreRows = 1 + steps;
+  const totalRows = Math.max(rows, coreRows);
+
+
+  const totalPlainRows = totalRows - 1 - steps;
+  const plainsFirst = Math.min(1, totalPlainRows);
+  const plainsRemaining = totalPlainRows - plainsFirst;
+  function plainsBeforeInc(i: number): number {
+    if (i === 0) return plainsFirst;
+    const idx = i - 1; // index into the remaining gaps (steps-1 gaps)
+    const gaps = steps - 1;
+    if (gaps === 0) return 0;
+    const base = Math.floor(plainsRemaining / gaps);
+    const extra = plainsRemaining % gaps;
+    return base + (idx < extra ? 1 : 0);
+  }
+
+  let currentCirc = 6;
+  let r = 2;
+  const lines: string[] = [];
+
+  lines.push(`Color: ${color}`);
+  lines.push("");
+  lines.push(`Row 1: 6 sc in magic ring [6]`);
+
+  for (let i = 0; i < steps; i++) {
+    const plains = plainsBeforeInc(i);
+    for (let j = 0; j < plains; j++) {
+      lines.push(`Row ${r}: sc around [${currentCirc}]`);
+      r++;
+    }
+
+    currentCirc += 6;
+    const incInstruction = i === 0 ? `inc * 6` : `(${i} sc, inc) * 6`;
+    lines.push(`Row ${r}: ${incInstruction} [${currentCirc}]`);
+    r++;
+  }
+
+  lines.push("");
+  lines.push("Leave the base open for sewing unless you want to keep building from the wide end.");
+  lines.push("Fasten off, leaving a long tail for sewing if this is a separate part.");
+  lines.push("");
+
+  const approx = Math.round(((6 + circumference) / 2) * totalRows * 0.9);
+  lines.push(`Approximate total stitches (very rough): ~${approx}.`);
+
+  return lines.join("\n");
 }
 
 function templateTeardrop(
@@ -247,7 +310,7 @@ function partPatternBody(part: DesignPart, mesh: StoredMesh | undefined): string
     const height = (dim.height ?? dim.connectivityRadius * 1.2) * scale;
     const stBase = stitchesForCircumference(rBase);
     const rows = rowsForLength(height);
-    return templateCone(rBase, height, stBase, rows, color);
+    return templateCone(stBase, rows, color);
   }
 
   if (family === "teardrop") {
@@ -262,7 +325,7 @@ function partPatternBody(part: DesignPart, mesh: StoredMesh | undefined): string
   const r = effectiveSphereRadius(mesh, part, scale);
   const rows = Math.max(1, rowsForLength(2 * r));
   const maxSt = stitchesForCircumference(r);
-  return templateSphere(r, rows, maxSt, color);
+  return templateSphere(rows, maxSt, color);
 }
 
 export function buildAssemblySection(parts: DesignPart[]): string {
