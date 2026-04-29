@@ -54,3 +54,21 @@ export interface Design {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface SketchInferenceRequest {
+  /** Relative file path inside backend/data/sketches (e.g. "IMG_2345.JPG") */
+  sketchPath: string;
+}
+
+export interface SketchPlacedPart {
+  meshId: string;
+  slotId: string;
+  position: Vector3;
+  scale: Vector3;
+  rotation: Vector3;
+  color: string;
+}
+
+export interface SketchInferenceResponse {
+  placedParts: SketchPlacedPart[];
+}
