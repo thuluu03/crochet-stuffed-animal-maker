@@ -1,4 +1,10 @@
-import type { DesignPayload } from "./types";
+import type {
+  DesignPayload,
+  FileUploadResponse,
+  MeshListResponse,
+  SketchInferenceRequest,
+  SketchInferenceResponse,
+} from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -53,4 +59,63 @@ export async function downloadCrochetPattern(designId: string, fallbackName?: st
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+export async function listSketches(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/sketches`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { sketches?: string[] };
+  return body.sketches ?? [];
+}
+
+export async function inferSketchParts(payload: SketchInferenceRequest): Promise<SketchInferenceResponse> {
+  const res = await fetch(`${API_BASE}/api/sketches/infer-parts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function uploadFile(endpoint: string, file: File): Promise<FileUploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export function uploadSketch(file: File): Promise<FileUploadResponse> {
+  return uploadFile("/api/sketches/upload", file);
+}
+
+export function uploadMesh(file: File): Promise<FileUploadResponse> {
+  return uploadFile("/api/meshes/upload", file);
+}
+
+export async function listMeshes(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/meshes`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as MeshListResponse;
+  return body.meshes ?? [];
+}
+
+export function getMeshUrl(filename: string): string {
+  return `${API_BASE}/api/meshes/${encodeURIComponent(filename)}`;
 }

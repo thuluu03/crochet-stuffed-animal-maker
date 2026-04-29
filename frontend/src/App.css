@@ -79,6 +79,62 @@ body {
   color: #8892a0;
 }
 
+.sketch-infer-panel {
+  margin-bottom: 1.2rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(26, 74, 122, 0.45);
+  border-radius: 10px;
+  background: rgba(12, 34, 62, 0.55);
+}
+
+.sketch-infer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.upload-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #a9b7c9;
+}
+
+.upload-input {
+  width: 100%;
+  font-size: 0.8rem;
+  color: #d9e2ef;
+}
+
+.sketch-select {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  background: #1a1a2e;
+  color: #e8e8e8;
+}
+
+.sketch-infer-btn {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #1a4a7a;
+  border-radius: 6px;
+  background: #0f3460;
+  color: #e8e8e8;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sketch-infer-btn:hover:not(:disabled) {
+  background: #1a4a7a;
+}
+
+.sketch-infer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .preset-list {
   list-style: none;
   margin: 0;

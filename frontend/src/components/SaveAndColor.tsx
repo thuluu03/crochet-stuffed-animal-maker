@@ -8,7 +8,7 @@ type ModalState =
   | { type: "error"; disconnected: string[] };
 
 export function SaveAndColor() {
-  const { parts, buildPayload } = useDesign();
+  const { parts, buildPayload, clearCanvas } = useDesign();
   const [saving, setSaving] = useState(false);
   const [designName, setDesignName] = useState("My stuffed animal");
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -84,6 +84,15 @@ export function SaveAndColor() {
             title={lastSavedDesignId ? "Download crochet pattern for the last saved design" : "Save a design first"}
           >
             {patternLoading ? "Preparing…" : "Download pattern"}
+          </button>
+          <button
+            type="button"
+            className="pattern-btn"
+            onClick={clearCanvas}
+            disabled={parts.length === 0}
+            title="Remove all parts from the canvas"
+          >
+            Clear canvas
           </button>
         </div>
       </div>
