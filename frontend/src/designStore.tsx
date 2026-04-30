@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import type { PlacedPart, DesignPayload } from "./types";
+import type { PlacedPart, DesignPayload, SketchPlacedPart } from "./types";
 import { MANNEQUIN_SLOTS } from "./presets";
 
 interface DesignState {
@@ -13,6 +13,9 @@ interface DesignState {
   getPartsBySlot: (slotId: string) => PlacedPart[];
   usedSlots: Set<string>;
   buildPayload: (finalizedMeshes: DesignPayload["finalizedMeshes"]) => DesignPayload;
+  applyInferredParts: (inferredParts: SketchPlacedPart[]) => void;
+  loadSavedDesignParts: (parts: DesignPayload["parts"]) => void;
+  clearCanvas: () => void;
 }
 
 function nextId(): string {
@@ -83,6 +86,42 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
     [parts]
   );
 
+  const applyInferredParts = useCallback((inferredParts: SketchPlacedPart[]) => {
+    setParts(
+      inferredParts.map((part) => ({
+        instanceId: nextId(),
+        meshId: part.meshId,
+        slotId: part.slotId,
+        position: [part.position.x, part.position.y, part.position.z],
+        scale: [part.scale.x, part.scale.y, part.scale.z],
+        rotation: [part.rotation.x, part.rotation.y, part.rotation.z],
+        color: part.color,
+      }))
+    );
+    setSelectedInstanceId(null);
+  }, []);
+
+  const loadSavedDesignParts = useCallback((savedParts: DesignPayload["parts"]) => {
+    setParts(
+      savedParts.map((part) => ({
+        instanceId: nextId(),
+        meshId: part.meshId,
+        slotId: part.slotId,
+        position: [part.position.x, part.position.y, part.position.z],
+        scale: [part.scale.x, part.scale.y, part.scale.z],
+        rotation: [part.rotation.x, part.rotation.y, part.rotation.z],
+        color: part.color,
+        rowColors: part.rowColors,
+      }))
+    );
+    setSelectedInstanceId(null);
+  }, []);
+
+  const clearCanvas = useCallback(() => {
+    setParts([]);
+    setSelectedInstanceId(null);
+  }, []);
+
   const value: DesignState = useMemo(
     () => ({
       parts,
@@ -95,6 +134,9 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
       getPartsBySlot,
       usedSlots,
       buildPayload,
+      applyInferredParts,
+      loadSavedDesignParts,
+      clearCanvas,
     }),
     [
       parts,
@@ -106,6 +148,9 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
       getPartsBySlot,
       usedSlots,
       buildPayload,
+      applyInferredParts,
+      loadSavedDesignParts,
+      clearCanvas,
     ]
   );
 

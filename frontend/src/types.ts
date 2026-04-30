@@ -55,4 +55,29 @@ export interface DesignPayload {
   }[];
 }
 
+export interface SketchInferenceRequest {
+  sketchPath: string;
+}
+
+export interface SketchPlacedPart {
+  meshId: string;
+  slotId: string;
+  position: { x: number; y: number; z: number };
+  scale: { x: number; y: number; z: number };
+  rotation: { x: number; y: number; z: number };
+  color: string;
+}
+
+export interface SketchInferenceResponse {
+  placedParts: SketchPlacedPart[];
+}
+
+export interface FileUploadResponse {
+  filename: string;
+}
+
+export interface MeshListResponse {
+  meshes: string[];
+}
+
 export type { Vector3 };
