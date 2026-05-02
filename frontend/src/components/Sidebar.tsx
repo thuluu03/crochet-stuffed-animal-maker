@@ -107,27 +107,6 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-tabs">
-        <button
-          type="button"
-          className={
-            activeTab === "parts" ? "sidebar-tab active" : "sidebar-tab"
-          }
-          onClick={() => setActiveTab("parts")}
-        >
-          Parts
-        </button>
-        <button
-          type="button"
-          className={
-            activeTab === "shapes" ? "sidebar-tab active" : "sidebar-tab"
-          }
-          onClick={() => setActiveTab("shapes")}
-        >
-          Shapes
-        </button>
-      </div>
-
       <div className="sidebar-content">
         <div className="sketch-infer-panel">
           <h2 className="sidebar-title">Sketch to Parts</h2>
@@ -207,6 +186,23 @@ export function Sidebar() {
               {previewLoading ? "Loading..." : "Preview design"}
             </button>
           </div>
+        </div>
+
+        <div className="sidebar-tabs">
+          <button
+            type="button"
+            className={activeTab === "parts" ? "sidebar-tab active" : "sidebar-tab"}
+            onClick={() => setActiveTab("parts")}
+          >
+            Parts
+          </button>
+          <button
+            type="button"
+            className={activeTab === "shapes" ? "sidebar-tab active" : "sidebar-tab"}
+            onClick={() => setActiveTab("shapes")}
+          >
+            Shapes
+          </button>
         </div>
 
         {activeTab === "parts" ? (

@@ -668,6 +668,37 @@ body {
   background: rgba(233, 69, 96, 0.15);
 }
 
+/* Sidebar tabs */
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid #0f3460;
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 0.55rem 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8892a0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.sidebar-tab:hover {
+  color: #e8e8e8;
+}
+
+.sidebar-tab.active {
+  color: #00e5ff;
+  border-bottom-color: #00e5ff;
+}
+
 .part-sections {
   display: flex;
   flex-direction: column;
