@@ -64,6 +64,7 @@ class Region:
     circularity: float
     orientation: float
     class_hint: Literal["head", "body", "arm", "leg", "limb", "ear"] | None = None
+    shape: Literal["sphere", "cylinder", "cone"] | None = None # FIXME: Include teardrop later
 
 
 @dataclass
@@ -74,6 +75,7 @@ class RegionExtractionDebug:
 
 
 def ensure_sketch_path(relative_path: str) -> Path:
+    """Resolve and validate a sketch path so it stays inside the sketches directory."""
     candidate = relative_path.strip()
     if not candidate:
         raise ValueError("sketchPath is required")
@@ -84,6 +86,7 @@ def ensure_sketch_path(relative_path: str) -> Path:
 
 
 def pca_orientation(points: np.ndarray) -> float:
+    """Estimate the dominant contour orientation in radians using PCA."""
     if len(points) < 2:
         return 0.0
     mean = np.mean(points, axis=0)
@@ -95,6 +98,7 @@ def pca_orientation(points: np.ndarray) -> float:
 
 
 def classify(region: Region, body_area: float) -> Literal["head", "body", "limb", "ear"]:
+    """Heuristically classify a region by size and shape relative to the body."""
     if region.area > body_area * 0.55:
         return "body"
     if region.area > body_area * 0.12 and region.circularity > 0.55:
@@ -105,6 +109,7 @@ def classify(region: Region, body_area: float) -> Literal["head", "body", "limb"
 
 
 def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple[int, int, int]]]) -> np.ndarray:
+    """Build a single binary mask from one or more HSV inclusive ranges."""
     mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
     for lower, upper in ranges:
         lower_arr = np.array(lower, dtype=np.uint8)
@@ -114,6 +119,7 @@ def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple
 
 
 def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body", "arm", "leg"]) -> Region:
+    """Convert a contour into normalized geometric region metadata."""
     area = float(cv2.contourArea(contour))
     x, y, w, h = cv2.boundingRect(contour)
     perimeter = float(cv2.arcLength(contour, True))
@@ -136,16 +142,19 @@ def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body",
         circularity=float(circularity),
         orientation=pca_orientation(points),
         class_hint=class_hint,
+        shape=shape_from_contour(contour),
     )
 
 
 def scale_from_region(region: Region, width: int, height: int) -> Vector3:
+    """Map a 2D region size to a plausible 3D part scale."""
     norm_w = max(0.2, (region.width / width) * 4.0)
     norm_h = max(0.2, (region.height / height) * 4.0)
     return Vector3(x=norm_w, y=max(0.2, norm_h * 0.5), z=norm_w)
 
 
 def pos_from_region(region: Region, width: int, height: int) -> Vector3:
+    """Map a 2D region center to mannequin-relative 3D coordinates."""
     return Vector3(
         x=((region.center_x / width) - 0.5) * 1.2,
         y=((height - region.center_y) / height - 0.5) * 1.8,
@@ -154,6 +163,13 @@ def pos_from_region(region: Region, width: int, height: int) -> Vector3:
 
 
 def make_part(slot_id: str, mesh_id: str, region: Region, width: int, height: int) -> PlacedPart:
+    """Create a placed 3D part from a detected region and target slot."""
+
+    # NOTE: This is based on MeshDimensions.ts for the mesh_id.
+    part_id = "limb" if slot_id in ["leftArm", "rightArm", "leftLeg", "rightLeg"] else slot_id
+    mesh_id = f"{part_id}-{region.shape}"
+    print(f"mesh_id: {mesh_id}")
+
     return PlacedPart(
         meshId=mesh_id,
         slotId=slot_id,
@@ -165,6 +181,7 @@ def make_part(slot_id: str, mesh_id: str, region: Region, width: int, height: in
 
 
 def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, mesh_id: str) -> None:
+    """Mirror one side part onto the opposite side when its pair is missing."""
     left = next((p for p in parts if p.slotId == left_slot), None)
     right = next((p for p in parts if p.slotId == right_slot), None)
     if left and not right:
@@ -190,8 +207,17 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, mesh
             )
         )
 
+def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
+    approx = cv2.approxPolyDP(contour, epsilon=0.02 * cv2.arcLength(contour, True), closed=True)
+    if len(approx) == 3:
+        return "triangle"
+    elif len(approx) == 4:
+        return "cylinder"
+    else:
+        return "sphere"
 
 def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
+    """Extract color-coded part regions (red/blue/green/yellow) and optional debug frames."""
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     height, width = image.shape[:2]
@@ -262,21 +288,23 @@ def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[lis
     )
     return regions, debug
 
-
 def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPart]:
+    """Map extracted regions to mannequin slots and mesh presets."""
     if not regions:
         return []
     body = next((r for r in regions if r.class_hint == "body"), regions[0])
+    print("body: ", body)
+
     for r in regions:
         if r.class_hint is None:
             r.class_hint = classify(r, body.area)
 
-    parts: list[PlacedPart] = [make_part("body", "body-teardrop", body, width, height)]
+    parts: list[PlacedPart] = [make_part("body", body.shape, body, width, height)]
 
     candidates = [r for r in regions if r is not body and (r.class_hint == "head" or (r.center_y < body.center_y and r.area >= body.area * 0.08))]
     head = candidates[0] if candidates else None
     if head:
-        parts.append(make_part("head", "head-sphere", head, width, height))
+        parts.append(make_part("head", head.shape, head, width, height))
 
     rem = [r for r in regions if r is not body and r is not head]
     arm_band_delta = max(body.height * 0.8, 20)
@@ -301,9 +329,9 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
         reverse=True,
     )
     if left_arms:
-        parts.append(make_part("leftArm", "limb-teardrop", left_arms[0], width, height))
+        parts.append(make_part("leftArm", left_arms[0].shape, left_arms[0], width, height))
     if right_arms:
-        parts.append(make_part("rightArm", "limb-teardrop", right_arms[0], width, height))
+        parts.append(make_part("rightArm", right_arms[0].shape, right_arms[0], width, height))
 
     legs = sorted(
         [r for r in rem if r.class_hint == "leg" or (r.center_y > body.center_y and r.area >= body.area * 0.03)],
@@ -313,18 +341,19 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     left_leg = next((r for r in legs if r.center_x < body.center_x), None)
     right_leg = next((r for r in legs if r.center_x >= body.center_x), None)
     if left_leg:
-        parts.append(make_part("leftLeg", "limb-cylinder", left_leg, width, height))
+        parts.append(make_part("leftLeg", left_leg.shape, left_leg, width, height))
     if right_leg:
-        parts.append(make_part("rightLeg", "limb-cylinder", right_leg, width, height))
+        parts.append(make_part("rightLeg", right_leg.shape, right_leg, width, height))
 
     ears = sorted([r for r in rem if r.class_hint == "ear" or (head and r.center_y < head.center_y + head.height * 0.2)], key=lambda r: r.area, reverse=True)
     left_ear = next((r for r in ears if r.center_x < body.center_x), None)
     right_ear = next((r for r in ears if r.center_x >= body.center_x), None)
     if left_ear:
-        parts.append(make_part("leftEar", "ear-teardrop", left_ear, width, height))
+        parts.append(make_part("leftEar", left_ear.shape, left_ear, width, height))
     if right_ear:
-        parts.append(make_part("rightEar", "ear-teardrop", right_ear, width, height))
+        parts.append(make_part("rightEar", right_ear.shape, right_ear, width, height))
 
+    # NOTE: This adds a default shape to the parts that are missing a pair, which may not be what the user wants.
     add_symmetric(parts, "leftArm", "rightArm", "limb-teardrop")
     add_symmetric(parts, "leftLeg", "rightLeg", "limb-cylinder")
     add_symmetric(parts, "leftEar", "rightEar", "ear-teardrop")
@@ -344,7 +373,9 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
 
 
 def build_pipeline_debug_image(original: np.ndarray, debug: RegionExtractionDebug) -> np.ndarray:
+    """Compose a 2x2 debug canvas for original, masks, contours, and labels."""
     def panel(title: str, panel_image: np.ndarray) -> np.ndarray:
+        """Annotate a debug panel image with a title."""
         pane = panel_image.copy()
         cv2.putText(
             pane,
@@ -370,6 +401,7 @@ def build_pipeline_debug_image(original: np.ndarray, debug: RegionExtractionDebu
 def save_debug_pipeline_images(
     sketch_path: str, original: np.ndarray, debug: RegionExtractionDebug, pipeline: np.ndarray
 ) -> Path:
+    """Persist debug pipeline artifacts into a timestamped run directory."""
     DEBUG_DIR.mkdir(parents=True, exist_ok=True)
     sketch_stem = Path(sketch_path).stem
     run_dir = DEBUG_DIR / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{sketch_stem}"
@@ -391,11 +423,13 @@ def save_debug_pipeline_images(
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    """Lightweight health check endpoint for service readiness."""
     return {"status": "ok"}
 
 
 @app.post("/infer", response_model=InferResponse)
 def infer(request: InferRequest) -> InferResponse:
+    """Infer placed parts from a sketch and save debug pipeline images."""
     try:
         image_path = ensure_sketch_path(request.sketchPath)
     except ValueError as exc:
@@ -426,6 +460,7 @@ def infer(request: InferRequest) -> InferResponse:
 
 @app.post("/infer-debug", response_model=InferDebugResponse)
 def infer_debug(request: InferRequest) -> InferDebugResponse:
+    """Run inference and return parts plus the written debug output directory."""
     try:
         image_path = ensure_sketch_path(request.sketchPath)
     except ValueError as exc:

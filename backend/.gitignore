@@ -3,3 +3,4 @@ dist
 data
 *.log
 /sketch_service/.venv
+/sketch_service/debug/*
