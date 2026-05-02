@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 app = FastAPI(title="Sketch Inference Service")
 
 SKETCHES_DIR = Path(os.getenv("SKETCHES_DIR", Path.cwd() / "data" / "sketches")).resolve()
+DEBUG_DIR = Path(os.getenv("DEBUG_DIR", Path.cwd() / "debug")).resolve()
 DEFAULT_COLOR = "#c4a574"
 MAX_DIMENSION = 1050
 
@@ -42,6 +44,11 @@ class InferResponse(BaseModel):
     placedParts: list[PlacedPart]
 
 
+class InferDebugResponse(BaseModel):
+    placedParts: list[PlacedPart]
+    debugOutputDir: str
+
+
 @dataclass
 class Region:
     min_x: int
@@ -56,7 +63,14 @@ class Region:
     aspect_ratio: float
     circularity: float
     orientation: float
-    class_hint: Literal["head", "body", "limb", "ear"] | None = None
+    class_hint: Literal["head", "body", "arm", "leg", "limb", "ear"] | None = None
+
+
+@dataclass
+class RegionExtractionDebug:
+    overlay_masks: np.ndarray
+    detected_contours: np.ndarray
+    labeled_parts: np.ndarray
 
 
 def ensure_sketch_path(relative_path: str) -> Path:
@@ -88,6 +102,41 @@ def classify(region: Region, body_area: float) -> Literal["head", "body", "limb"
     if region.area < body_area * 0.08 and region.aspect_ratio < 1.4 and region.circularity > 0.6:
         return "ear"
     return "limb"
+
+
+def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple[int, int, int]]]) -> np.ndarray:
+    mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
+    for lower, upper in ranges:
+        lower_arr = np.array(lower, dtype=np.uint8)
+        upper_arr = np.array(upper, dtype=np.uint8)
+        mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower_arr, upper_arr))
+    return mask
+
+
+def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body", "arm", "leg"]) -> Region:
+    area = float(cv2.contourArea(contour))
+    x, y, w, h = cv2.boundingRect(contour)
+    perimeter = float(cv2.arcLength(contour, True))
+    moments = cv2.moments(contour)
+    cx = moments["m10"] / moments["m00"] if moments["m00"] else x + w / 2
+    cy = moments["m01"] / moments["m00"] if moments["m00"] else y + h / 2
+    points = contour.reshape(-1, 2).astype(np.float32)
+    circularity = (4 * math.pi * area / (perimeter * perimeter)) if perimeter else 0.0
+    return Region(
+        min_x=int(x),
+        min_y=int(y),
+        max_x=int(x + w - 1),
+        max_y=int(y + h - 1),
+        area=area,
+        center_x=float(cx),
+        center_y=float(cy),
+        width=int(w),
+        height=int(h),
+        aspect_ratio=float(w / max(1, h)),
+        circularity=float(circularity),
+        orientation=pca_orientation(points),
+        class_hint=class_hint,
+    )
 
 
 def scale_from_region(region: Region, width: int, height: int) -> Vector3:
@@ -142,77 +191,125 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, mesh
         )
 
 
-def extract_regions(image: np.ndarray) -> list[Region]:
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.equalizeHist(gray)
-    binary = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 7
-    )
-    denoised = cv2.medianBlur(binary, 3)
+def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    opened = cv2.morphologyEx(denoised, cv2.MORPH_OPEN, kernel)
-    closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
-
-    contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    height, width = gray.shape[:2]
+    height, width = image.shape[:2]
     min_area = max(40, int(width * height * 0.0005))
 
+    specs: list[
+        tuple[
+            Literal["head", "body", "arm", "leg"],
+            list[tuple[tuple[int, int, int], tuple[int, int, int]]],
+            tuple[int, int, int],
+        ]
+    ] = [
+        ("head", [((0, 80, 50), (10, 255, 255)), ((170, 80, 50), (179, 255, 255))], (0, 0, 255)),
+        ("body", [((100, 80, 50), (130, 255, 255))], (255, 0, 0)),
+        ("arm", [((40, 60, 40), (85, 255, 255))], (0, 255, 0)),
+        ("leg", [((20, 80, 80), (35, 255, 255))], (0, 255, 255)),
+    ]
+
+    overlay_masks = image.copy()
+    contour_canvas = image.copy()
+    labeled_canvas = image.copy()
     regions: list[Region] = []
-    for contour in contours:
-        area = float(cv2.contourArea(contour))
-        if area < min_area:
-            continue
-        x, y, w, h = cv2.boundingRect(contour)
-        perimeter = float(cv2.arcLength(contour, True))
-        moments = cv2.moments(contour)
-        cx = moments["m10"] / moments["m00"] if moments["m00"] else x + w / 2
-        cy = moments["m01"] / moments["m00"] if moments["m00"] else y + h / 2
-        points = contour.reshape(-1, 2).astype(np.float32)
-        circularity = (4 * math.pi * area / (perimeter * perimeter)) if perimeter else 0.0
-        regions.append(
-            Region(
-                min_x=int(x),
-                min_y=int(y),
-                max_x=int(x + w - 1),
-                max_y=int(y + h - 1),
-                area=area,
-                center_x=float(cx),
-                center_y=float(cy),
-                width=int(w),
-                height=int(h),
-                aspect_ratio=float(w / max(1, h)),
-                circularity=float(circularity),
-                orientation=pca_orientation(points),
+
+    for class_hint, ranges, color_bgr in specs:
+        raw_mask = merge_ranges(hsv, ranges)
+        opened = cv2.morphologyEx(raw_mask, cv2.MORPH_OPEN, kernel)
+        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
+        overlay_masks[closed > 0] = (
+            overlay_masks[closed > 0] * 0.35 + np.array(color_bgr, dtype=np.float32) * 0.65
+        ).astype(np.uint8)
+
+        contours, _ = cv2.findContours(closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(contour_canvas, contours, -1, color_bgr, 2)
+
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < min_area:
+                continue
+            region = region_from_contour(contour, class_hint)
+            regions.append(region)
+            cv2.rectangle(
+                labeled_canvas,
+                (region.min_x, region.min_y),
+                (region.max_x, region.max_y),
+                color_bgr,
+                2,
             )
-        )
+            cv2.putText(
+                labeled_canvas,
+                class_hint,
+                (region.min_x, max(18, region.min_y - 6)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                color_bgr,
+                2,
+                cv2.LINE_AA,
+            )
+
     regions.sort(key=lambda r: r.area, reverse=True)
-    return regions
+    debug = (
+        RegionExtractionDebug(
+            overlay_masks=overlay_masks,
+            detected_contours=contour_canvas,
+            labeled_parts=labeled_canvas,
+        )
+        if include_debug
+        else None
+    )
+    return regions, debug
 
 
 def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPart]:
     if not regions:
         return []
-    body = regions[0]
+    body = next((r for r in regions if r.class_hint == "body"), regions[0])
     for r in regions:
-        r.class_hint = classify(r, body.area)
+        if r.class_hint is None:
+            r.class_hint = classify(r, body.area)
 
     parts: list[PlacedPart] = [make_part("body", "body-teardrop", body, width, height)]
 
-    candidates = [r for r in regions[1:] if r.class_hint == "head" or (r.center_y < body.center_y and r.area >= body.area * 0.08)]
+    candidates = [r for r in regions if r is not body and (r.class_hint == "head" or (r.center_y < body.center_y and r.area >= body.area * 0.08))]
     head = candidates[0] if candidates else None
     if head:
         parts.append(make_part("head", "head-sphere", head, width, height))
 
     rem = [r for r in regions if r is not body and r is not head]
     arm_band_delta = max(body.height * 0.8, 20)
-    left_arms = sorted([r for r in rem if r.center_x < body.center_x and abs(r.center_y - body.center_y) <= arm_band_delta], key=lambda r: r.area, reverse=True)
-    right_arms = sorted([r for r in rem if r.center_x >= body.center_x and abs(r.center_y - body.center_y) <= arm_band_delta], key=lambda r: r.area, reverse=True)
+    left_arms = sorted(
+        [
+            r
+            for r in rem
+            if r.center_x < body.center_x
+            and (r.class_hint == "arm" or abs(r.center_y - body.center_y) <= arm_band_delta)
+        ],
+        key=lambda r: r.area,
+        reverse=True,
+    )
+    right_arms = sorted(
+        [
+            r
+            for r in rem
+            if r.center_x >= body.center_x
+            and (r.class_hint == "arm" or abs(r.center_y - body.center_y) <= arm_band_delta)
+        ],
+        key=lambda r: r.area,
+        reverse=True,
+    )
     if left_arms:
         parts.append(make_part("leftArm", "limb-teardrop", left_arms[0], width, height))
     if right_arms:
         parts.append(make_part("rightArm", "limb-teardrop", right_arms[0], width, height))
 
-    legs = sorted([r for r in rem if r.center_y > body.center_y and r.area >= body.area * 0.03], key=lambda r: r.area, reverse=True)
+    legs = sorted(
+        [r for r in rem if r.class_hint == "leg" or (r.center_y > body.center_y and r.area >= body.area * 0.03)],
+        key=lambda r: r.area,
+        reverse=True,
+    )
     left_leg = next((r for r in legs if r.center_x < body.center_x), None)
     right_leg = next((r for r in legs if r.center_x >= body.center_x), None)
     if left_leg:
@@ -246,6 +343,52 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     return parts
 
 
+def build_pipeline_debug_image(original: np.ndarray, debug: RegionExtractionDebug) -> np.ndarray:
+    def panel(title: str, panel_image: np.ndarray) -> np.ndarray:
+        pane = panel_image.copy()
+        cv2.putText(
+            pane,
+            title,
+            (12, 26),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.75,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        return pane
+
+    top_left = panel("Original image", original)
+    top_right = panel("Overlay masks", debug.overlay_masks)
+    bottom_left = panel("Detected contours", debug.detected_contours)
+    bottom_right = panel("Labeled parts", debug.labeled_parts)
+    top = np.hstack([top_left, top_right])
+    bottom = np.hstack([bottom_left, bottom_right])
+    return np.vstack([top, bottom])
+
+
+def save_debug_pipeline_images(
+    sketch_path: str, original: np.ndarray, debug: RegionExtractionDebug, pipeline: np.ndarray
+) -> Path:
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    sketch_stem = Path(sketch_path).stem
+    run_dir = DEBUG_DIR / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}_{sketch_stem}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    outputs: list[tuple[str, np.ndarray]] = [
+        ("original.png", original),
+        ("overlay_masks.png", debug.overlay_masks),
+        ("detected_contours.png", debug.detected_contours),
+        ("labeled_parts.png", debug.labeled_parts),
+        ("pipeline.png", pipeline),
+    ]
+    for filename, frame in outputs:
+        ok = cv2.imwrite(str(run_dir / filename), frame)
+        if not ok:
+            raise HTTPException(status_code=500, detail=f"Failed to write debug image: {filename}")
+    return run_dir
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -270,10 +413,42 @@ def infer(request: InferRequest) -> InferResponse:
         scale = MAX_DIMENSION / max(h, w)
         image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
-    regions = extract_regions(image)
-    if not regions:
-        raise HTTPException(status_code=422, detail="No sketch silhouette detected")
+    regions, debug = extract_regions(image, include_debug=True)
+    if not regions or debug is None:
+        raise HTTPException(status_code=422, detail="No color-coded parts detected")
 
     ih, iw = image.shape[:2]
     parts = map_regions(regions, iw, ih)
+    pipeline = build_pipeline_debug_image(image, debug)
+    save_debug_pipeline_images(request.sketchPath, image, debug, pipeline)
     return InferResponse(placedParts=parts)
+
+
+@app.post("/infer-debug", response_model=InferDebugResponse)
+def infer_debug(request: InferRequest) -> InferDebugResponse:
+    try:
+        image_path = ensure_sketch_path(request.sketchPath)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Sketch file not found")
+
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise HTTPException(status_code=422, detail="Failed to read sketch image")
+
+    h, w = image.shape[:2]
+    if max(h, w) > MAX_DIMENSION:
+        scale = MAX_DIMENSION / max(h, w)
+        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    regions, debug = extract_regions(image, include_debug=True)
+    if not regions or debug is None:
+        raise HTTPException(status_code=422, detail="No color-coded parts detected")
+
+    ih, iw = image.shape[:2]
+    parts = map_regions(regions, iw, ih)
+    pipeline = build_pipeline_debug_image(image, debug)
+    run_dir = save_debug_pipeline_images(request.sketchPath, image, debug, pipeline)
+    return InferDebugResponse(placedParts=parts, debugOutputDir=str(run_dir))

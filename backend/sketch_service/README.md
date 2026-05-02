@@ -4,19 +4,42 @@ This service performs sketch-to-part inference in Python and is consumed by the 
 
 ## Run locally
 
+If you're running this for the first time: 
 ```bash
 cd backend/sketch_service
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-SKETCHES_DIR="$(pwd)/../data/sketches" uvicorn app:app --host 127.0.0.1 --port 8001
+SKETCHES_DIR="$(pwd)/../data/sketches" uvicorn app:app --host 127.0.0.1 --port 8003
+```
+
+To activate the environment: 
+```bash
+cd backend/sketch_service
+source .venv/bin/activate
+```
+
+To start the sketch services: 
+```bash
+SKETCHES_DIR="$(pwd)/../data/sketches" uvicorn app:app --host 127.0.0.1 --port 8003
 ```
 
 ## Environment
 
 - `SKETCHES_DIR`: absolute path to the sketches directory (default: `<cwd>/data/sketches`)
+- `DEBUG_DIR`: absolute path for debug outputs (default: `<cwd>/debug`)
 
 ## API
 
 - `GET /health` -> `{ "status": "ok" }`
 - `POST /infer` with body `{ "sketchPath": "IMG_2345.JPG" }` -> `{ "placedParts": [...] }`
+
+## Debug outputs
+
+Each successful inference writes debug images to `DEBUG_DIR` in a timestamped folder:
+
+- `original.png`
+- `overlay_masks.png`
+- `detected_contours.png`
+- `labeled_parts.png`
+- `pipeline.png`
