@@ -15,12 +15,12 @@ import {
   getBaseGeometry,
   isTeardropType,
 } from "../segmentColors";
-import { getSegmentCount } from "../presets";
 import {
   roundedCapsuleGeometry,
   roundedCylinderGeometry,
 } from "../roundedGeometry";
 import * as THREE from "three";
+import { computePatternRowCount } from "../patternRowCount";
 import {
   setLiveScale,
   setLivePosition,
@@ -31,6 +31,9 @@ import {
   getTransformMode,
   subscribeTransformMode,
 } from "../transformModeStore";
+import { getHighlight, subscribeHighlight } from "../highlightStore";
+import { isEyedropperActive, pickEyedropperColor } from "../eyedropperStore";
+import { SegmentHatch } from "./SegmentHatch";
 
 interface PartMeshProps {
   part: PlacedPart;
@@ -52,6 +55,7 @@ interface PartGeometryProps {
   outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
+  highlightSegments?: number[];
 }
 
 /** Renders a mesh with vertex colors by segment (horizontal bands). */
@@ -64,6 +68,7 @@ function SegmentColoredMesh({
   showOutline,
   outlineColor,
   outlineThickness,
+  highlightSegments,
 }: {
   meshId: string;
   segmentCount: number;
@@ -73,8 +78,15 @@ function SegmentColoredMesh({
   showOutline: boolean;
   outlineColor: string;
   outlineThickness: number;
+  highlightSegments?: number[];
 }) {
   const baseGeom = useMemo(() => getBaseGeometry(meshId), [meshId]);
+  const yBounds = useMemo(() => {
+    if (!baseGeom) return null;
+    baseGeom.computeBoundingBox();
+    const bb = baseGeom.boundingBox!;
+    return { yMin: bb.min.y, yMax: bb.max.y };
+  }, [baseGeom]);
   const coloredGeom = useMemo(() => {
     if (!baseGeom || segmentCount <= 0) return baseGeom;
     return addSegmentVertexColors(
@@ -91,18 +103,30 @@ function SegmentColoredMesh({
     meshId === "ear-circle" ? [Math.PI / 2, 0, 0] : undefined;
 
   return (
-    <mesh rotation={rotation} castShadow receiveShadow>
-      <primitive object={coloredGeom} attach="geometry" />
-      <meshStandardMaterial
-        vertexColors
-        roughness={0.8}
-        metalness={0.1}
-        emissive={emissive}
-      />
-      {showOutline && (
-        <Outlines thickness={outlineThickness} color={outlineColor} />
+    <group>
+      <mesh rotation={rotation} castShadow receiveShadow>
+        <primitive object={coloredGeom} attach="geometry" />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
+        {showOutline && (
+          <Outlines thickness={outlineThickness} color={outlineColor} />
+        )}
+      </mesh>
+      {highlightSegments && baseGeom && yBounds && (
+        <SegmentHatch
+          geometry={baseGeom}
+          segmentCount={segmentCount}
+          yMin={yBounds.yMin}
+          yMax={yBounds.yMax}
+          rotation={rotation}
+          highlightSegments={highlightSegments}
+        />
       )}
-    </mesh>
+    </group>
   );
 }
 
@@ -158,6 +182,7 @@ function RoundedCapsuleMesh({
   outlineThickness,
   segmentCount,
   rowColors,
+  highlightSegments,
 }: {
   color: string;
   emissive: string;
@@ -166,6 +191,7 @@ function RoundedCapsuleMesh({
   outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
+  highlightSegments?: number[];
 }) {
   const baseGeom = useMemo(
     () => roundedCapsuleGeometry(0.29, -0.38, 0.38, 36),
@@ -182,18 +208,29 @@ function RoundedCapsuleMesh({
   }, [baseGeom, segmentCount, color, rowColors]);
 
   return (
-    <mesh geometry={coloredGeom ?? baseGeom} castShadow receiveShadow>
-      <meshStandardMaterial
-        color={coloredGeom ? undefined : color}
-        vertexColors={!!coloredGeom}
-        roughness={0.8}
-        metalness={0.1}
-        emissive={emissive}
-      />
-      {showOutline && (
-        <Outlines thickness={outlineThickness} color={outlineColor} />
+    <group>
+      <mesh geometry={coloredGeom ?? baseGeom} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={coloredGeom ? undefined : color}
+          vertexColors={!!coloredGeom}
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
+        {showOutline && (
+          <Outlines thickness={outlineThickness} color={outlineColor} />
+        )}
+      </mesh>
+      {highlightSegments && (
+        <SegmentHatch
+          geometry={baseGeom}
+          segmentCount={segmentCount}
+          yMin={-0.38}
+          yMax={0.38}
+          highlightSegments={highlightSegments}
+        />
       )}
-    </mesh>
+    </group>
   );
 }
 
@@ -211,6 +248,7 @@ function CustomTeardropGLTF({
   outlineThickness,
   segmentCount,
   rowColors,
+  highlightSegments,
 }: {
   color: string;
   emissive: string;
@@ -219,6 +257,7 @@ function CustomTeardropGLTF({
   outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
+  highlightSegments?: number[];
 }) {
   const { scene } = useGLTF(CUSTOM_TEARDROP_URL);
 
@@ -336,7 +375,26 @@ function CustomTeardropGLTF({
     </mesh>
   ));
 
-  return <group>{meshes}</group>;
+  const hatchOverlays =
+    highlightSegments && normalized.bounds
+      ? normalized.geometries.map((geom, i) => (
+          <SegmentHatch
+            key={`hatch-${i}`}
+            geometry={geom}
+            segmentCount={segmentCount}
+            yMin={normalized.bounds!.min.y}
+            yMax={normalized.bounds!.max.y}
+            highlightSegments={highlightSegments}
+          />
+        ))
+      : null;
+
+  return (
+    <group>
+      {meshes}
+      {hatchOverlays}
+    </group>
+  );
 }
 
 /** Renders a single body part geometry by preset id */
@@ -349,6 +407,7 @@ function PartGeometry({
   outlineThickness,
   segmentCount,
   rowColors,
+  highlightSegments,
 }: PartGeometryProps) {
   if (
     segmentCount > 0 &&
@@ -365,6 +424,7 @@ function PartGeometry({
         showOutline={showOutline}
         outlineColor={outlineColor}
         outlineThickness={outlineThickness}
+        highlightSegments={highlightSegments}
       />
     );
   }
@@ -455,6 +515,7 @@ function PartGeometry({
           outlineThickness={outlineThickness}
           segmentCount={segmentCount}
           rowColors={rowColors}
+          highlightSegments={highlightSegments}
         />
       );
     case "arm":
@@ -503,6 +564,7 @@ function PartGeometry({
             outlineThickness={outlineThickness}
             segmentCount={segmentCount}
             segmentColors={rowColors}
+            highlightSegments={highlightSegments}
           />
         </group>
       );
@@ -581,6 +643,7 @@ function PartGeometry({
             outlineThickness={outlineThickness}
             segmentCount={segmentCount}
             segmentColors={rowColors}
+            highlightSegments={highlightSegments}
           />
         </group>
       );
@@ -654,6 +717,7 @@ function PartGeometry({
           outlineThickness={outlineThickness}
           segmentCount={segmentCount}
           rowColors={rowColors}
+          highlightSegments={highlightSegments}
         />
       );
     default:
@@ -686,6 +750,7 @@ export function PartMesh({
   const { scene } = useThree();
   const [hovered, setHovered] = useState(false);
   const [transformMode, setTransformMode] = useState(getTransformMode);
+  const [highlight, setHighlightState] = useState(getHighlight);
   const outerGroupRef = useRef<THREE.Group>(
     null,
   ) as React.MutableRefObject<THREE.Group>;
@@ -698,6 +763,13 @@ export function PartMesh({
       unsub();
     };
   }, []);
+
+  useEffect(() => subscribeHighlight(setHighlightState), []);
+
+  const highlightSegments =
+    highlight.instanceId === part.instanceId && highlight.segments.length > 0
+      ? highlight.segments
+      : undefined;
 
   // Imperatively sync position+rotation on outer group so R3F never resets them mid-drag.
   useEffect(() => {
@@ -790,8 +862,9 @@ export function PartMesh({
       showOutline={hovered || selected}
       outlineColor={outlineColor}
       outlineThickness={outlineThickness}
-      segmentCount={getSegmentCount(part.meshId)}
+      segmentCount={computePatternRowCount(part.meshId, part.scale)}
       rowColors={part.rowColors}
+      highlightSegments={highlightSegments}
     />
   );
 
@@ -800,6 +873,28 @@ export function PartMesh({
       ref={outerGroupRef}
       onClick={(e) => {
         e.stopPropagation();
+        if (isEyedropperActive()) {
+          const mesh = e.object as THREE.Mesh;
+          const localPt = mesh.worldToLocal(e.point.clone());
+          const geom = mesh.geometry;
+          geom.computeBoundingBox();
+          const bbox = geom.boundingBox;
+          if (bbox && bbox.max.y > bbox.min.y) {
+            const segCount = computePatternRowCount(part.meshId, part.scale);
+            const t = Math.max(
+              0,
+              Math.min(1, (localPt.y - bbox.min.y) / (bbox.max.y - bbox.min.y)),
+            );
+            const seg = Math.min(
+              segCount - 1,
+              Math.max(0, Math.floor(t * segCount)),
+            );
+            pickEyedropperColor(part.rowColors?.[seg] ?? part.color);
+          } else {
+            pickEyedropperColor(part.color);
+          }
+          return;
+        }
         onClick();
       }}
       onPointerOver={(e) => {

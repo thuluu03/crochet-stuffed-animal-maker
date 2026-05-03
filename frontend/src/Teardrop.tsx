@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Outlines } from "@react-three/drei";
+import { SegmentHatch } from "./components/SegmentHatch";
 import {
   addSegmentVertexColorsWithRange,
   TEARDROP_MIN_Y,
@@ -17,6 +18,7 @@ interface TeardropProps {
   outlineThickness?: number;
   segmentCount?: number;
   segmentColors?: Record<number, string>;
+  highlightSegments?: number[];
 }
 
 export function Teardrop({
@@ -27,6 +29,7 @@ export function Teardrop({
   outlineThickness = 0.03,
   segmentCount = 0,
   segmentColors,
+  highlightSegments,
 }: TeardropProps) {
   const baseGeom = useMemo(
     () =>
@@ -34,9 +37,9 @@ export function Teardrop({
         TEARDROP_RADIUS,
         TEARDROP_MIN_Y,
         TEARDROP_MAX_Y,
-        36
+        36,
       ),
-    []
+    [],
   );
 
   const coloredGeom = useMemo(() => {
@@ -48,24 +51,36 @@ export function Teardrop({
       segmentColors,
       TEARDROP_MIN_Y,
       TEARDROP_MAX_Y,
-      0
+      0,
     );
   }, [baseGeom, segmentCount, color, segmentColors]);
 
   if (segmentCount > 0 && coloredGeom) {
     return (
-      <mesh castShadow receiveShadow>
-        <primitive object={coloredGeom} attach="geometry" />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.8}
-          metalness={0.1}
-          emissive={emissive}
-        />
-        {showOutline && (
-          <Outlines thickness={outlineThickness} color={outlineColor} />
+      <group>
+        <mesh castShadow receiveShadow>
+          <primitive object={coloredGeom} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.8}
+            metalness={0.1}
+            emissive={emissive}
+          />
+          {showOutline && (
+            <Outlines thickness={outlineThickness} color={outlineColor} />
+          )}
+        </mesh>
+        {highlightSegments && (
+          <SegmentHatch
+            geometry={baseGeom}
+            segmentCount={segmentCount}
+            yMin={TEARDROP_MIN_Y}
+            yMax={TEARDROP_MAX_Y}
+            yOffset={0}
+            highlightSegments={highlightSegments}
+          />
         )}
-      </mesh>
+      </group>
     );
   }
 

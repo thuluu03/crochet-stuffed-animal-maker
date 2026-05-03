@@ -1,6 +1,12 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { useDesign } from "../designStore";
-import { getSegmentCount } from "../presets";
+
+const MIRROR_SLOTS: Record<string, string> = {
+  leftArm: "rightArm", rightArm: "leftArm",
+  leftLeg: "rightLeg", rightLeg: "leftLeg",
+  leftEar: "rightEar", rightEar: "leftEar",
+};
+import { computePatternRowCount } from "../patternRowCount";
 import {
   getLiveTransform,
   resetLiveTransform,
@@ -12,8 +18,16 @@ import {
   subscribeTransformMode,
   type TransformMode,
 } from "../transformModeStore";
+import { setHighlight, clearHighlight } from "../highlightStore";
+import { activateEyedropper, deactivateEyedropper, subscribeEyedropper } from "../eyedropperStore";
 
 type Tab = "colors" | "transforms";
+
+const PALETTE_COLORS = [
+  "#ffffff", "#f5f0e8", "#d4c5b0", "#9e8c7a", "#5c4f3d", "#1a1a18",
+  "#e8453c", "#e87a3c", "#e8b83c", "#a8d43c", "#3cd47a", "#3cb0e8",
+  "#3c6ae8", "#8a3ce8", "#e83cb0", "#e83c78", "#c87070", "#70a8c8",
+];
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
@@ -63,13 +77,14 @@ function AxisInput({
 }
 
 export function ColorPopup() {
-  const { selectedInstanceId, getPart, updatePart, removePart, setSelected } =
+  const { selectedInstanceId, getPart, getPartsBySlot, updatePart, insertPart, removePart, setSelected } =
     useDesign();
 
   const [pos, setPos] = useState({ x: 80, y: 120 });
-  const [tab, setTab] = useState<Tab>("colors");
+  const [tab, setTab] = useState<Tab>("transforms");
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
+  const customColorRef = useRef<HTMLInputElement>(null);
 
   // Live transforms from Three.js world
   const [liveTransform, setLiveTransformState] = useState(getLiveTransform);
@@ -97,6 +112,18 @@ export function ColorPopup() {
   // Manual uniform-scale input
   const [manualScale, setManualScale] = useState<string>("");
 
+  const [selectedSegments, setSelectedSegments] = useState<Set<number>>(new Set());
+  const [lastClickedSeg, setLastClickedSeg] = useState<number | null>(null);
+  const [baseSelected, setBaseSelected] = useState(false);
+  const [eyedropperActive, setEyedropperActive] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeEyedropper(setEyedropperActive);
+    return () => {
+      unsub();
+    };
+  }, []);
+
   const onHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {
       dragging.current = true;
@@ -122,6 +149,10 @@ export function ColorPopup() {
     if (selectedPart) {
       setManualScale("");
       setDrafts({});
+      setSelectedSegments(new Set());
+      setLastClickedSeg(null);
+      setBaseSelected(false);
+      deactivateEyedropper();
       const [sx, sy, sz] = selectedPart.scale;
       resetLiveTransform(
         { x: sx, y: sy, z: sz },
@@ -136,9 +167,20 @@ export function ColorPopup() {
     selectedPart?.instanceId,
   ]);
 
+  const segmentsKey = useMemo(() => [...selectedSegments].sort().join(","), [selectedSegments]);
+
+  useEffect(() => {
+    if (selectedPart && selectedSegments.size > 0) {
+      setHighlight(selectedPart.instanceId, [...selectedSegments]);
+    } else {
+      clearHighlight();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segmentsKey, selectedPart?.instanceId]);
+
   if (!selectedPart) return null;
 
-  const segmentCount = getSegmentCount(selectedPart.meshId);
+  const segmentCount = computePatternRowCount(selectedPart.meshId, selectedPart.scale);
   const liveScale = liveTransform.scale;
 
   // --- Commit helpers ---
@@ -201,6 +243,81 @@ export function ColorPopup() {
     setManualScale("");
   };
 
+  function applyColor(hex: string) {
+    if (baseSelected) {
+      updatePart(selectedPart!.instanceId, { color: hex, rowColors: {} });
+    }
+    if (selectedSegments.size > 0) {
+      const next = { ...selectedPart!.rowColors };
+      for (const i of selectedSegments) next[i] = hex;
+      updatePart(selectedPart!.instanceId, { rowColors: next });
+    }
+    setSelectedSegments(new Set());
+    setBaseSelected(false);
+  }
+
+  function handleChipClick(i: number, e: React.MouseEvent) {
+    if (e.shiftKey && lastClickedSeg !== null) {
+      const lo = Math.min(lastClickedSeg, i);
+      const hi = Math.max(lastClickedSeg, i);
+      setSelectedSegments((prev) => {
+        const next = new Set(prev);
+        for (let j = lo; j <= hi; j++) next.add(j);
+        return next;
+      });
+    } else {
+      setSelectedSegments((prev) =>
+        prev.size === 1 && prev.has(i) ? new Set() : new Set([i])
+      );
+      setLastClickedSeg(i);
+    }
+  }
+
+  const mirrorSlotId = MIRROR_SLOTS[selectedPart.slotId];
+  const mirrorPart = mirrorSlotId ? getPartsBySlot(mirrorSlotId)[0] : undefined;
+  const mirrorLabel = mirrorSlotId ? mirrorSlotId.replace(/([A-Z])/g, " $1").trim() : "";
+
+  const MirrorButton = mirrorSlotId ? (
+    <button
+      type="button"
+      className="mirror-part-btn"
+      title={`Copy to ${mirrorLabel}`}
+      onClick={() => {
+        const [px, py, pz] = selectedPart.position;
+        const [rx, ry, rz] = selectedPart.rotation;
+        const sharedProps = {
+          color: selectedPart.color,
+          rowColors: selectedPart.rowColors ? { ...selectedPart.rowColors } : undefined,
+          scale: [...selectedPart.scale] as [number, number, number],
+          position: [-px, py, pz] as [number, number, number],
+          rotation: [rx, -ry, -rz] as [number, number, number],
+        };
+        if (mirrorPart) {
+          updatePart(mirrorPart.instanceId, sharedProps);
+        } else {
+          insertPart({
+            instanceId: "part-" + Math.random().toString(36).slice(2, 11),
+            meshId: selectedPart.meshId,
+            slotId: mirrorSlotId,
+            ...sharedProps,
+          });
+        }
+      }}
+    >
+      Copy to mirror
+    </button>
+  ) : null;
+
+  const RemoveButton = (
+    <button
+      type="button"
+      className="remove-part-btn"
+      onClick={() => removePart(selectedPart.instanceId)}
+    >
+      Remove part
+    </button>
+  );
+
   return (
     <div className="color-popup" style={{ left: pos.x, top: pos.y }}>
       <div className="color-popup-header" onMouseDown={onHeaderMouseDown}>
@@ -224,49 +341,106 @@ export function ColorPopup() {
       </div>
 
       <div className="color-popup-tabs">
-        <button className={`color-popup-tab${tab === "colors" ? " active" : ""}`} onClick={() => setTab("colors")}>
-          Colors
-        </button>
         <button className={`color-popup-tab${tab === "transforms" ? " active" : ""}`} onClick={() => setTab("transforms")}>
           Transforms
+        </button>
+        <button className={`color-popup-tab${tab === "colors" ? " active" : ""}`} onClick={() => setTab("colors")}>
+          Colors
         </button>
       </div>
 
       <div className="color-popup-body">
         {tab === "colors" && (
           <>
-            <div className="color-row">
-              <label>Base color</label>
-              <input
-                type="color"
-                value={selectedPart.color}
-                onChange={(e) => updatePart(selectedPart.instanceId, { color: e.target.value })}
-              />
-              <span className="color-hex">{selectedPart.color}</span>
+            <div className="row-colors-header">
+              <span className="row-colors-label">
+                {(() => {
+                  const n = selectedSegments.size + (baseSelected ? 1 : 0);
+                  return n === 0 ? "Click rows to select" : `${n} selected`;
+                })()}
+              </span>
+              {(selectedSegments.size > 0 || baseSelected) && (
+                <button
+                  type="button"
+                  className="row-colors-clear"
+                  onClick={() => { setSelectedSegments(new Set()); setBaseSelected(false); }}
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
-            {segmentCount > 0 && (
-              <div className="row-colors">
-                <span className="row-colors-label">Segments: {segmentCount}</span>
-                <p className="segment-hint">Set a color per horizontal segment.</p>
-                {Array.from({ length: segmentCount }, (_, i) => (
-                  <div key={i} className="color-row">
-                    <label>Segment {i + 1}</label>
-                    <input
-                      type="color"
-                      value={selectedPart.rowColors?.[i] ?? selectedPart.color}
-                      onChange={(e) => {
-                        const next = { ...selectedPart.rowColors, [i]: e.target.value };
-                        updatePart(selectedPart.instanceId, { rowColors: next });
-                      }}
-                    />
-                    <span className="color-hex">
-                      {selectedPart.rowColors?.[i] ?? selectedPart.color}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="overall-color-section">
+              <button
+                type="button"
+                className={`overall-color-item${baseSelected ? " selected" : ""}`}
+                onClick={() => setBaseSelected((b) => !b)}
+              >
+                <span className="overall-color-dot" style={{ background: selectedPart.color }} />
+                <span className="overall-color-label">Overall</span>
+              </button>
+            </div>
+
+            <div className="segment-rows">
+              {Array.from({ length: segmentCount }, (_, displayIdx) => {
+                const i = segmentCount - 1 - displayIdx;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`segment-row-item${selectedSegments.has(i) ? " selected" : ""}`}
+                    onClick={(e) => handleChipClick(i, e)}
+                  >
+                    <span className="segment-row-dot" style={{ background: selectedPart.rowColors?.[i] ?? selectedPart.color }} />
+                    <span className="segment-row-label">Row {displayIdx + 1}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {MirrorButton}
+            {RemoveButton}
+
+            <div className="color-palette">
+              {PALETTE_COLORS.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  className="palette-swatch"
+                  style={{ background: hex }}
+                  onClick={() => applyColor(hex)}
+                  title={hex}
+                />
+              ))}
+              <button
+                type="button"
+                className="palette-swatch palette-swatch-custom"
+                onClick={() => customColorRef.current?.click()}
+                title="Custom color"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className={`palette-swatch palette-swatch-eyedropper${eyedropperActive ? " active" : ""}`}
+                title="Pick color from shape"
+                onClick={() => {
+                  if (eyedropperActive) {
+                    deactivateEyedropper();
+                  } else {
+                    activateEyedropper((hex) => applyColor(hex));
+                  }
+                }}
+              >
+                ◉
+              </button>
+              <input
+                ref={customColorRef}
+                type="color"
+                style={{ display: "none", position: "absolute" }}
+                onChange={(e) => applyColor(e.target.value)}
+              />
+            </div>
           </>
         )}
 
@@ -335,16 +509,10 @@ export function ColorPopup() {
                 ? "Gizmo drags save on release."
                 : "Type a value and press Enter, or drag the gizmo."}
             </p>
+            {MirrorButton}
+            {RemoveButton}
           </div>
         )}
-
-        <button
-          type="button"
-          className="remove-part-btn"
-          onClick={() => removePart(selectedPart.instanceId)}
-        >
-          Remove part
-        </button>
       </div>
     </div>
   );
