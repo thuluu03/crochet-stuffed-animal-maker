@@ -97,17 +97,6 @@ def pca_orientation(points: np.ndarray) -> float:
     return float(math.atan2(principal[1], principal[0]))
 
 
-def classify(region: Region, body_area: float) -> Literal["head", "body", "limb", "ear"]:
-    """Heuristically classify a region by size and shape relative to the body."""
-    if region.area > body_area * 0.55:
-        return "body"
-    if region.area > body_area * 0.12 and region.circularity > 0.55:
-        return "head"
-    if region.area < body_area * 0.08 and region.aspect_ratio < 1.4 and region.circularity > 0.6:
-        return "ear"
-    return "limb"
-
-
 def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple[int, int, int]]]) -> np.ndarray:
     """Build a single binary mask from one or more HSV inclusive ranges."""
     mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
@@ -122,6 +111,7 @@ def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body",
     """Convert a contour into normalized geometric region metadata."""
     area = float(cv2.contourArea(contour))
     x, y, w, h = cv2.boundingRect(contour)
+    print(f"region_from_contou for {class_hint}: x: {x}, y: {y}, w: {w}, h: {h}")
     perimeter = float(cv2.arcLength(contour, True))
     moments = cv2.moments(contour)
     cx = moments["m10"] / moments["m00"] if moments["m00"] else x + w / 2
@@ -150,6 +140,7 @@ def scale_from_region(region: Region, width: int, height: int) -> Vector3:
     """Map a 2D region size to a plausible 3D part scale."""
     norm_w = max(0.2, (region.width / width) * 4.0)
     norm_h = max(0.2, (region.height / height) * 4.0)
+    print(f"scale_from_region: region width: {region.width}, region  height: {region.height}, width: {width}, height: {height}, norm_w: {norm_w}, norm_h: {norm_h}")
     return Vector3(x=norm_w, y=norm_h, z=min(norm_w, norm_h))
 
 
@@ -175,6 +166,7 @@ def make_part(slot_id: str, region: Region, width: int, height: int) -> PlacedPa
     Local position and rotation follow mannequin snap defaults (zero offset, slot rotation);
     scale still reflects the detected region size.
     """
+    print("making part: ", slot_id, region.shape, region.orientation)
     return PlacedPart(
         meshId=region.shape or "sphere",
         slotId=slot_id,
@@ -293,75 +285,46 @@ def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[lis
     )
     return regions, debug
 
+_PAIRED_SLOTS: tuple[tuple[str, str, str], ...] = (
+    ("arm", "leftArm", "rightArm"),
+    ("leg", "leftLeg", "rightLeg"),
+    ("ear", "leftEar", "rightEar"),
+)
+
+
 def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPart]:
-    """Map extracted regions to mannequin slots and mesh presets."""
+    """Map color-tagged regions to mannequin slots and shape meshes.
+
+    Assumes ``regions`` come from ``extract_regions``: every ``class_hint`` is set
+    and the list is sorted by area (largest first).
+    """
     if not regions:
         return []
+
     body = next((r for r in regions if r.class_hint == "body"), regions[0])
-
-    for r in regions:
-        if r.class_hint is None:
-            # if colored labels for class hints are not provided, we assume the body part based on size and shape relative to the body
-            r.class_hint = classify(r, body.area) 
-
     parts: list[PlacedPart] = [make_part("body", body, width, height)]
 
-    candidates = [r for r in regions if r is not body and (r.class_hint == "head" or (r.center_y < body.center_y and r.area >= body.area * 0.08))]
-    head = candidates[0] if candidates else None
+    head = next((r for r in regions if r is not body and r.class_hint == "head"), None)
     if head:
         parts.append(make_part("head", head, width, height))
 
-    rem = [r for r in regions if r is not body and r is not head]
-    arm_band_delta = max(body.height * 0.8, 20)
-    left_arms = sorted(
-        [
-            r
-            for r in rem
-            if r.center_x < body.center_x
-            and (r.class_hint == "arm" or abs(r.center_y - body.center_y) <= arm_band_delta)
-        ],
-        key=lambda r: r.area,
-        reverse=True,
-    )
-    right_arms = sorted(
-        [
-            r
-            for r in rem
-            if r.center_x >= body.center_x
-            and (r.class_hint == "arm" or abs(r.center_y - body.center_y) <= arm_band_delta)
-        ],
-        key=lambda r: r.area,
-        reverse=True,
-    )
-    if left_arms:
-        parts.append(make_part("leftArm", left_arms[0], width, height))
-    if right_arms:
-        parts.append(make_part("rightArm", right_arms[0], width, height))
+    def pick_side(class_hint: str, on_left: bool) -> Region | None:
+        for r in regions:
+            if r is body or r.class_hint != class_hint:
+                continue
+            if (r.center_x < body.center_x) == on_left:
+                return r
+        return None
 
-    legs = sorted(
-        [r for r in rem if r.class_hint == "leg" or (r.center_y > body.center_y and r.area >= body.area * 0.03)],
-        key=lambda r: r.area,
-        reverse=True,
-    )
-    left_leg = next((r for r in legs if r.center_x < body.center_x), None)
-    right_leg = next((r for r in legs if r.center_x >= body.center_x), None)
-    if left_leg:
-        parts.append(make_part("leftLeg", left_leg, width, height))
-    if right_leg:
-        parts.append(make_part("rightLeg", right_leg, width, height))
-
-    ears = sorted([r for r in rem if r.class_hint == "ear" or (head and r.center_y < head.center_y + head.height * 0.2)], key=lambda r: r.area, reverse=True)
-    left_ear = next((r for r in ears if r.center_x < body.center_x), None)
-    right_ear = next((r for r in ears if r.center_x >= body.center_x), None)
-    if left_ear:
-        parts.append(make_part("leftEar", left_ear, width, height))
-    if right_ear:
-        parts.append(make_part("rightEar", right_ear, width, height))
-
-    # NOTE: This adds a default shape to the parts that are missing a pair, which may not be what the user wants.
-    add_symmetric(parts, "leftArm", "rightArm", "limb-teardrop")
-    add_symmetric(parts, "leftLeg", "rightLeg", "limb-cylinder")
-    add_symmetric(parts, "leftEar", "rightEar", "ear-teardrop")
+    for class_hint, left_slot, right_slot in _PAIRED_SLOTS:
+        left = pick_side(class_hint, on_left=True)
+        right = pick_side(class_hint, on_left=False)
+        if left:
+            parts.append(make_part(left_slot, left, width, height))
+        if right:
+            parts.append(make_part(right_slot, right, width, height))
+        # Mirror whichever side is present when the other is missing.
+        add_symmetric(parts, left_slot, right_slot, "")
 
     if not any(p.slotId == "head" for p in parts):
         parts.append(
