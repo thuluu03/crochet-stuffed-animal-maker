@@ -86,15 +86,25 @@ def ensure_sketch_path(relative_path: str) -> Path:
 
 
 def pca_orientation(points: np.ndarray) -> float:
-    """Estimate the dominant contour orientation in radians using PCA."""
+    """Angle of a point set's principal axis in world (Three.js) coords.
+
+    Two adjustments versus the raw atan2:
+    - OpenCV's image-y points down while Three.js +y points up, so we negate y.
+    - The eigenvector has sign ambiguity, so we fold the angle to ``(-pi/2, pi/2]``
+      to represent an axis (line) rather than a directed vector.
+    """
     if len(points) < 2:
         return 0.0
     mean = np.mean(points, axis=0)
-    centered = points - mean
-    cov = np.cov(centered.T)
+    cov = np.cov((points - mean).T)
     eigvals, eigvecs = np.linalg.eig(cov)
     principal = eigvecs[:, int(np.argmax(eigvals))]
-    return float(math.atan2(principal[1], principal[0]))
+    angle = math.atan2(-principal[1], principal[0])
+    if angle > math.pi / 2:
+        angle -= math.pi
+    elif angle <= -math.pi / 2:
+        angle += math.pi
+    return float(angle)
 
 
 def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple[int, int, int]]]) -> np.ndarray:
@@ -111,7 +121,6 @@ def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body",
     """Convert a contour into normalized geometric region metadata."""
     area = float(cv2.contourArea(contour))
     x, y, w, h = cv2.boundingRect(contour)
-    print(f"region_from_contou for {class_hint}: x: {x}, y: {y}, w: {w}, h: {h}")
     perimeter = float(cv2.arcLength(contour, True))
     moments = cv2.moments(contour)
     cx = moments["m10"] / moments["m00"] if moments["m00"] else x + w / 2
@@ -136,73 +145,82 @@ def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body",
     )
 
 
+_DIM_SCALE = 4.0
+_MIN_SCALE = 0.05
+
+
+def normalized_dim(px: float, image_max: int) -> float:
+    """Convert a pixel size to a 3D scale value with a small floor."""
+    image_max = max(1, int(image_max))
+    return max(_MIN_SCALE, (float(px) / image_max) * _DIM_SCALE)
+
+
 def scale_from_region(region: Region, width: int, height: int) -> Vector3:
-    """Map a 2D region size to a plausible 3D part scale."""
-    norm_w = max(0.2, (region.width / width) * 4.0)
-    norm_h = max(0.2, (region.height / height) * 4.0)
-    print(f"scale_from_region: region width: {region.width}, region  height: {region.height}, width: {width}, height: {height}, norm_w: {norm_w}, norm_h: {norm_h}")
-    return Vector3(x=norm_w, y=norm_h, z=min(norm_w, norm_h))
+    """3D scale matched to the region, accounting for the mesh's local axes.
+
+    - ``sphere``: uniform scale based on the larger side (mesh is isotropic).
+    - ``cone``: ``y`` follows height, ``x``/``z`` follow width (apex stays at +Y).
+    - ``cylinder``: the mesh is rotated so its length lies along the rectangle's
+      long axis, so ``y`` (mesh length) follows the long side and ``x``/``z``
+      (radius) follow the short side. The circular caps end up at the short-side ends.
+    """
+    image_max = max(width, height)
+    long_norm = normalized_dim(max(region.width, region.height), image_max)
+    short_norm = normalized_dim(min(region.width, region.height), image_max)
+    width_norm = normalized_dim(region.width, image_max)
+    height_norm = normalized_dim(region.height, image_max)
+
+    if region.shape == "sphere":
+        return Vector3(x=width_norm, y=height_norm, z=min(width_norm, height_norm))
+    if region.shape == "cone":
+        return Vector3(x=width_norm, y=height_norm, z=width_norm)
+    return Vector3(x=short_norm, y=long_norm, z=short_norm)
 
 
-def slot_default_rotation(slot_id: str) -> Vector3:
-    """Default part rotation per mannequin slot (must match frontend `MANNEQUIN_SLOTS`)."""
-    z_by_slot: dict[str, float] = {
-        "head": 0.0,
-        "body": 0.0,
-        "leftArm": 0.0,
-        "rightArm": 0.0,
-        "leftLeg": 0.0,
-        "rightLeg": 0.0,
-        "leftEar": 0.0,
-        "rightEar": 0.0,
-    }
-    z = z_by_slot.get(slot_id, 0.0)
-    return Vector3(x=0.0, y=0.0, z=z)
+def part_rotation(region: Region) -> Vector3:
+    """Z rotation that aligns the mesh's natural axis with the rectangle.
+
+    - ``sphere``/``cone``: no rotation (sphere is isotropic; cone apex is at +Y).
+    - ``cylinder``: rotate around Z so the mesh axis (+Y) lines up with the
+      rectangle's long axis. This places the circular caps at the short-side ends.
+    """
+    if region.shape == "cylinder":
+        return Vector3(x=0.0, y=0.0, z=region.orientation - math.pi / 2)
+    return Vector3(x=0.0, y=0.0, z=0.0)
 
 
 def make_part(slot_id: str, region: Region, width: int, height: int) -> PlacedPart:
-    """Create a placed 3D part using a bare shape mesh (sphere/cylinder/cone).
-
-    Local position and rotation follow mannequin snap defaults (zero offset, slot rotation);
-    scale still reflects the detected region size.
-    """
-    print("making part: ", slot_id, region.shape, region.orientation)
+    """Build a placed 3D part snapped to ``slot_id`` with shape-aware scale/rotation."""
     return PlacedPart(
         meshId=region.shape or "sphere",
         slotId=slot_id,
         position=Vector3(x=0.0, y=0.0, z=0.0),
         scale=scale_from_region(region, width, height),
-        rotation=slot_default_rotation(slot_id),
+        rotation=part_rotation(region),
         color=DEFAULT_COLOR,
     )
 
 
+def _mirror_part(source: PlacedPart, target_slot_id: str) -> PlacedPart:
+    """Mirror a part to the opposite slot, flipping the Z rotation for symmetry."""
+    return PlacedPart(
+        meshId=source.meshId,
+        slotId=target_slot_id,
+        position=Vector3(x=0.0, y=0.0, z=0.0),
+        scale=source.scale,
+        rotation=Vector3(x=source.rotation.x, y=source.rotation.y, z=-source.rotation.z),
+        color=source.color,
+    )
+
+
 def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mesh_id: str) -> None:
-    """Mirror one side part onto the opposite side when its pair is missing."""
+    """If only one side of a pair is present, mirror it onto the other side."""
     left = next((p for p in parts if p.slotId == left_slot), None)
     right = next((p for p in parts if p.slotId == right_slot), None)
     if left and not right:
-        parts.append(
-            PlacedPart(
-                meshId=left.meshId,
-                slotId=right_slot,
-                position=Vector3(x=0.0, y=0.0, z=0.0),
-                scale=left.scale,
-                rotation=slot_default_rotation(right_slot),
-                color=left.color,
-            )
-        )
+        parts.append(_mirror_part(left, right_slot))
     elif right and not left:
-        parts.append(
-            PlacedPart(
-                meshId=right.meshId,
-                slotId=left_slot,
-                position=Vector3(x=0.0, y=0.0, z=0.0),
-                scale=right.scale,
-                rotation=slot_default_rotation(left_slot),
-                color=right.color,
-            )
-        )
+        parts.append(_mirror_part(right, left_slot))
 
 def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
     """Approximate a contour to one of the supported shape mesh ids."""
@@ -333,7 +351,7 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
                 slotId="head",
                 position=Vector3(x=0.0, y=0.0, z=0.0),
                 scale=Vector3(x=1.0, y=1.0, z=1.0),
-                rotation=slot_default_rotation("head"),
+                rotation=Vector3(x=0.0, y=0.0, z=0.0),
                 color=DEFAULT_COLOR,
             )
         )
