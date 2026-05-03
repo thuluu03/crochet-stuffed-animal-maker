@@ -155,14 +155,16 @@ def normalized_dim(px: float, image_max: int) -> float:
     return max(_MIN_SCALE, (float(px) / image_max) * _DIM_SCALE)
 
 
-def scale_from_region(region: Region, width: int, height: int) -> Vector3:
-    """3D scale matched to the region, accounting for the mesh's local axes.
+def scale_from_region(slot_id: str, region: Region, width: int, height: int) -> Vector3:
+    """3D scale matched to the region, accounting for the mesh's local axes after rotation.
 
     - ``sphere``: uniform scale based on the larger side (mesh is isotropic).
-    - ``cone``: ``y`` follows height, ``x``/``z`` follow width (apex stays at +Y).
+    - ``cone``: ``y`` is the apex-to-base length, ``x``/``z`` is the base radius. For
+      arm slots the cone is rotated 90° so its length lies along the rectangle's
+      width; for everything else the cone stays apex-up so length follows height.
     - ``cylinder``: the mesh is rotated so its length lies along the rectangle's
-      long axis, so ``y`` (mesh length) follows the long side and ``x``/``z``
-      (radius) follow the short side. The circular caps end up at the short-side ends.
+      long axis, so ``y`` (length) follows the long side and ``x``/``z`` (radius)
+      follow the short side. The circular caps end up at the short-side ends.
     """
     image_max = max(width, height)
     long_norm = normalized_dim(max(region.width, region.height), image_max)
@@ -173,19 +175,38 @@ def scale_from_region(region: Region, width: int, height: int) -> Vector3:
     if region.shape == "sphere":
         return Vector3(x=width_norm, y=height_norm, z=min(width_norm, height_norm))
     if region.shape == "cone":
+        if slot_id in ("leftArm", "rightArm"):
+            return Vector3(x=height_norm, y=width_norm, z=height_norm)
         return Vector3(x=width_norm, y=height_norm, z=width_norm)
     return Vector3(x=short_norm, y=long_norm, z=short_norm)
 
 
-def part_rotation(region: Region) -> Vector3:
-    """Z rotation that aligns the mesh's natural axis with the rectangle.
+# Z rotation that points a cone's apex (default +Y) toward the body anchor at the origin.
+# Three.js Z rotations are counterclockwise viewed from +Z, so a +Z rotation sends +Y to
+# -X. The left-arm slot sits at -X (so apex must point +X, hence -pi/2) and the right-arm
+# slot sits at +X (so apex must point -X, hence +pi/2). Leg slots sit below the body, so
+# the default apex-up orientation already faces the body.
+_CONE_APEX_TOWARD_BODY: dict[str, float] = {
+    "leftArm": -math.pi / 2,
+    "rightArm": math.pi / 2,
+    "leftLeg": 0.0,
+    "rightLeg": 0.0,
+}
 
-    - ``sphere``/``cone``: no rotation (sphere is isotropic; cone apex is at +Y).
+
+def part_rotation(slot_id: str, region: Region) -> Vector3:
+    """Z rotation that aligns the mesh's natural axis with the contour and slot.
+
+    - ``sphere``: no rotation (isotropic mesh).
+    - ``cone``: defaults to apex-up. For limb slots (arm/leg), the apex is rotated
+      to point toward the body so the limb attaches by its wide base.
     - ``cylinder``: rotate around Z so the mesh axis (+Y) lines up with the
       rectangle's long axis. This places the circular caps at the short-side ends.
     """
     if region.shape == "cylinder":
         return Vector3(x=0.0, y=0.0, z=region.orientation - math.pi / 2)
+    if region.shape == "cone":
+        return Vector3(x=0.0, y=0.0, z=_CONE_APEX_TOWARD_BODY.get(slot_id, 0.0))
     return Vector3(x=0.0, y=0.0, z=0.0)
 
 
@@ -195,8 +216,8 @@ def make_part(slot_id: str, region: Region, width: int, height: int) -> PlacedPa
         meshId=region.shape or "sphere",
         slotId=slot_id,
         position=Vector3(x=0.0, y=0.0, z=0.0),
-        scale=scale_from_region(region, width, height),
-        rotation=part_rotation(region),
+        scale=scale_from_region(slot_id, region, width, height),
+        rotation=part_rotation(slot_id, region),
         color=DEFAULT_COLOR,
     )
 
