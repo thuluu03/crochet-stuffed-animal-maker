@@ -1,3 +1,7 @@
+- keep the default rotations (rotation parameter)
+- in map_regions, change the rotation to use region.orientation if it's not a fallback 
+
+
 def extract_regions(image: np.ndarray) -> list[Region]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     gray = cv2.equalizeHist(gray)

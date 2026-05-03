@@ -150,59 +150,67 @@ def scale_from_region(region: Region, width: int, height: int) -> Vector3:
     """Map a 2D region size to a plausible 3D part scale."""
     norm_w = max(0.2, (region.width / width) * 4.0)
     norm_h = max(0.2, (region.height / height) * 4.0)
-    return Vector3(x=norm_w, y=max(0.2, norm_h * 0.5), z=norm_w)
+    return Vector3(x=norm_w, y=norm_h, z=min(norm_w, norm_h))
 
 
-def pos_from_region(region: Region, width: int, height: int) -> Vector3:
-    """Map a 2D region center to mannequin-relative 3D coordinates."""
-    return Vector3(
-        x=((region.center_x / width) - 0.5) * 1.2,
-        y=((height - region.center_y) / height - 0.5) * 1.8,
-        z=0.0,
-    )
+def slot_default_rotation(slot_id: str) -> Vector3:
+    """Default part rotation per mannequin slot (must match frontend `MANNEQUIN_SLOTS`)."""
+    z_by_slot: dict[str, float] = {
+        "head": 0.0,
+        "body": 0.0,
+        "leftArm": 0.0,
+        "rightArm": 0.0,
+        "leftLeg": 0.0,
+        "rightLeg": 0.0,
+        "leftEar": 0.0,
+        "rightEar": 0.0,
+    }
+    z = z_by_slot.get(slot_id, 0.0)
+    return Vector3(x=0.0, y=0.0, z=z)
 
 
 def make_part(slot_id: str, mesh_id: str, region: Region, width: int, height: int) -> PlacedPart:
-    """Create a placed 3D part from a detected region and target slot."""
+    """Create a placed 3D part from a detected region and target slot.
 
-    # NOTE: This is based on MeshDimensions.ts for the mesh_id.
+    Local position and rotation follow mannequin snap defaults (zero offset, slot rotation);
+    scale still reflects the detected region size.
+    """
     part_id = "limb" if slot_id in ["leftArm", "rightArm", "leftLeg", "rightLeg"] else slot_id
     mesh_id = f"{part_id}-{region.shape}"
-    print(f"mesh_id: {mesh_id}")
 
     return PlacedPart(
         meshId=mesh_id,
         slotId=slot_id,
-        position=pos_from_region(region, width, height),
+        position=Vector3(x=0.0, y=0.0, z=0.0),
         scale=scale_from_region(region, width, height),
-        rotation=Vector3(x=0.0, y=0.0, z=region.orientation),
+        rotation=slot_default_rotation(slot_id),
         color=DEFAULT_COLOR,
     )
 
 
-def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, mesh_id: str) -> None:
+def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mesh_id: str) -> None:
     """Mirror one side part onto the opposite side when its pair is missing."""
     left = next((p for p in parts if p.slotId == left_slot), None)
     right = next((p for p in parts if p.slotId == right_slot), None)
     if left and not right:
         parts.append(
             PlacedPart(
-                meshId=mesh_id,
+                meshId=left.meshId,
                 slotId=right_slot,
-                position=Vector3(x=-left.position.x, y=left.position.y, z=left.position.z),
+                position=Vector3(x=0.0, y=0.0, z=0.0),
                 scale=left.scale,
-                rotation=Vector3(x=left.rotation.x, y=left.rotation.y, z=-left.rotation.z),
+                rotation=slot_default_rotation(right_slot),
                 color=left.color,
             )
         )
     elif right and not left:
         parts.append(
             PlacedPart(
-                meshId=mesh_id,
+                meshId=right.meshId,
                 slotId=left_slot,
-                position=Vector3(x=-right.position.x, y=right.position.y, z=right.position.z),
+                position=Vector3(x=0.0, y=0.0, z=0.0),
                 scale=right.scale,
-                rotation=Vector3(x=right.rotation.x, y=right.rotation.y, z=-right.rotation.z),
+                rotation=slot_default_rotation(left_slot),
                 color=right.color,
             )
         )
@@ -293,11 +301,11 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     if not regions:
         return []
     body = next((r for r in regions if r.class_hint == "body"), regions[0])
-    print("body: ", body)
 
     for r in regions:
         if r.class_hint is None:
-            r.class_hint = classify(r, body.area)
+            # if colored labels for class hints are not provided, we assume the body part based on size and shape relative to the body
+            r.class_hint = classify(r, body.area) 
 
     parts: list[PlacedPart] = [make_part("body", body.shape, body, width, height)]
 
@@ -329,6 +337,7 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
         reverse=True,
     )
     if left_arms:
+        print("left_arms: ", width, height)
         parts.append(make_part("leftArm", left_arms[0].shape, left_arms[0], width, height))
     if right_arms:
         parts.append(make_part("rightArm", right_arms[0].shape, right_arms[0], width, height))
@@ -363,9 +372,9 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
             PlacedPart(
                 meshId="head-sphere",
                 slotId="head",
-                position=Vector3(x=0.0, y=0.64, z=0.0),
-                scale=Vector3(x=0.9, y=0.9, z=0.9),
-                rotation=Vector3(x=0.0, y=0.0, z=0.0),
+                position=Vector3(x=0.0, y=0.0, z=0.0),
+                scale=Vector3(x=1.0, y=1.0, z=1.0),
+                rotation=slot_default_rotation("head"),
                 color=DEFAULT_COLOR,
             )
         )
