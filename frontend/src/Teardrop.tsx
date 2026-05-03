@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { Outlines } from "@react-three/drei";
+import { SegmentHatch } from "./components/SegmentHatch";
 import {
   addSegmentVertexColorsWithRange,
   TEARDROP_MIN_Y,
@@ -20,6 +21,7 @@ interface TeardropProps {
   outlineThickness?: number;
   segmentCount?: number;
   segmentColors?: Record<number, string>;
+  highlightSegments?: number[];
 }
 
 export function Teardrop({
@@ -30,6 +32,7 @@ export function Teardrop({
   outlineThickness = 0.03,
   segmentCount = 0,
   segmentColors,
+  highlightSegments,
 }: TeardropProps) {
   const sphereGeom = useMemo(
     () => new THREE.SphereGeometry(TEARDROP_SPHERE_RADIUS, 32, 32),
@@ -50,26 +53,16 @@ export function Teardrop({
   const coloredSphereGeom = useMemo(() => {
     if (segmentCount <= 0) return null;
     return addSegmentVertexColorsWithRange(
-      sphereGeom.clone(),
-      segmentCount,
-      color,
-      segmentColors,
-      TEARDROP_MIN_Y,
-      TEARDROP_MAX_Y,
-      0
+      sphereGeom.clone(), segmentCount, color, segmentColors,
+      TEARDROP_MIN_Y, TEARDROP_MAX_Y, 0
     );
   }, [sphereGeom, segmentCount, color, segmentColors]);
 
   const coloredConeGeom = useMemo(() => {
     if (segmentCount <= 0) return null;
     return addSegmentVertexColorsWithRange(
-      coneGeom.clone(),
-      segmentCount,
-      color,
-      segmentColors,
-      TEARDROP_MIN_Y,
-      TEARDROP_MAX_Y,
-      TEARDROP_CONE_POSITION_Y
+      coneGeom.clone(), segmentCount, color, segmentColors,
+      TEARDROP_MIN_Y, TEARDROP_MAX_Y, TEARDROP_CONE_POSITION_Y
     );
   }, [coneGeom, segmentCount, color, segmentColors]);
 
@@ -78,28 +71,34 @@ export function Teardrop({
       <group>
         <mesh position={[0, TEARDROP_CONE_POSITION_Y, 0]} castShadow receiveShadow>
           <primitive object={coloredConeGeom} attach="geometry" />
-          <meshStandardMaterial
-            vertexColors
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
+          <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+          {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
         </mesh>
+        {highlightSegments && (
+          <SegmentHatch
+            geometry={coneGeom}
+            segmentCount={segmentCount}
+            yMin={TEARDROP_MIN_Y}
+            yMax={TEARDROP_MAX_Y}
+            yOffset={TEARDROP_CONE_POSITION_Y}
+            highlightSegments={highlightSegments}
+          />
+        )}
         <mesh position={[0, 0, 0]} castShadow receiveShadow>
           <primitive object={coloredSphereGeom} attach="geometry" />
-          <meshStandardMaterial
-            vertexColors
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
+          <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+          {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
         </mesh>
+        {highlightSegments && (
+          <SegmentHatch
+            geometry={sphereGeom}
+            segmentCount={segmentCount}
+            yMin={TEARDROP_MIN_Y}
+            yMax={TEARDROP_MAX_Y}
+            yOffset={0}
+            highlightSegments={highlightSegments}
+          />
+        )}
       </group>
     );
   }

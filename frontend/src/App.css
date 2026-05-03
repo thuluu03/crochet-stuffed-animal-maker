@@ -636,11 +636,32 @@ body {
   border-top: 1px solid #0f3460;
 }
 
+.row-colors-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
 .row-colors-label {
   font-size: 0.8rem;
   color: #a0a0a0;
-  display: block;
-  margin-bottom: 0.5rem;
+}
+
+.row-colors-clear {
+  background: none;
+  border: none;
+  color: #8892a0;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.row-colors-clear:hover {
+  color: #e8e8e8;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .segment-hint {
@@ -649,12 +670,177 @@ body {
   color: #8892a0;
 }
 
-.row-colors .color-row {
-  margin-bottom: 0.35rem;
+.overall-color-section {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.overall-color-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 1.4rem;
+  border-radius: 8px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.overall-color-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.overall-color-item.selected {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.overall-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+.overall-color-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #e0e8f0;
+  letter-spacing: 0.02em;
+}
+
+.segment-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 0.4rem;
+}
+
+.segment-row-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 5px;
+  border: 1.5px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+  width: 100%;
+}
+
+.segment-row-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.segment-row-item.selected {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.segment-row-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.segment-row-label {
+  font-size: 0.8rem;
+  color: #c8d4de;
+}
+
+.color-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+  border-top: 1px solid #0f3460;
+  position: sticky;
+  bottom: 0;
+  background: #16213e;
+  padding-bottom: 0.25rem;
+}
+
+.palette-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.12s, transform 0.12s;
+}
+
+.palette-swatch:hover {
+  border-color: rgba(255, 255, 255, 0.65);
+  transform: scale(1.18);
+}
+
+.palette-swatch-custom {
+  background: rgba(255, 255, 255, 0.1);
+  color: #a0b0c0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.palette-swatch-eyedropper {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a0b0c0;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.palette-swatch-eyedropper.active {
+  color: #00e5ff;
+  border-color: #00e5ff;
+  background: rgba(0, 229, 255, 0.12);
+}
+
+body.eyedropper-active,
+body.eyedropper-active * {
+  cursor: crosshair !important;
+}
+
+.mirror-part-btn {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  color: #00e5ff;
+  border: 1px solid #00e5ff;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s;
+}
+
+.mirror-part-btn:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.12);
+}
+
+.mirror-part-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .remove-part-btn {
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
   padding: 0.4rem 0.75rem;
   background: transparent;
   color: #e94560;
