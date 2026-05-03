@@ -169,17 +169,14 @@ def slot_default_rotation(slot_id: str) -> Vector3:
     return Vector3(x=0.0, y=0.0, z=z)
 
 
-def make_part(slot_id: str, mesh_id: str, region: Region, width: int, height: int) -> PlacedPart:
-    """Create a placed 3D part from a detected region and target slot.
+def make_part(slot_id: str, region: Region, width: int, height: int) -> PlacedPart:
+    """Create a placed 3D part using a bare shape mesh (sphere/cylinder/cone).
 
     Local position and rotation follow mannequin snap defaults (zero offset, slot rotation);
     scale still reflects the detected region size.
     """
-    part_id = "limb" if slot_id in ["leftArm", "rightArm", "leftLeg", "rightLeg"] else slot_id
-    mesh_id = f"{part_id}-{region.shape}"
-
     return PlacedPart(
-        meshId=mesh_id,
+        meshId=region.shape or "sphere",
         slotId=slot_id,
         position=Vector3(x=0.0, y=0.0, z=0.0),
         scale=scale_from_region(region, width, height),
@@ -216,13 +213,13 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mes
         )
 
 def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
+    """Approximate a contour to one of the supported shape mesh ids."""
     approx = cv2.approxPolyDP(contour, epsilon=0.02 * cv2.arcLength(contour, True), closed=True)
     if len(approx) == 3:
-        return "triangle"
-    elif len(approx) == 4:
+        return "cone"
+    if len(approx) == 4:
         return "cylinder"
-    else:
-        return "sphere"
+    return "sphere"
 
 def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
     """Extract color-coded part regions (red/blue/green/yellow) and optional debug frames."""
@@ -307,12 +304,12 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
             # if colored labels for class hints are not provided, we assume the body part based on size and shape relative to the body
             r.class_hint = classify(r, body.area) 
 
-    parts: list[PlacedPart] = [make_part("body", body.shape, body, width, height)]
+    parts: list[PlacedPart] = [make_part("body", body, width, height)]
 
     candidates = [r for r in regions if r is not body and (r.class_hint == "head" or (r.center_y < body.center_y and r.area >= body.area * 0.08))]
     head = candidates[0] if candidates else None
     if head:
-        parts.append(make_part("head", head.shape, head, width, height))
+        parts.append(make_part("head", head, width, height))
 
     rem = [r for r in regions if r is not body and r is not head]
     arm_band_delta = max(body.height * 0.8, 20)
@@ -337,10 +334,9 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
         reverse=True,
     )
     if left_arms:
-        print("left_arms: ", width, height)
-        parts.append(make_part("leftArm", left_arms[0].shape, left_arms[0], width, height))
+        parts.append(make_part("leftArm", left_arms[0], width, height))
     if right_arms:
-        parts.append(make_part("rightArm", right_arms[0].shape, right_arms[0], width, height))
+        parts.append(make_part("rightArm", right_arms[0], width, height))
 
     legs = sorted(
         [r for r in rem if r.class_hint == "leg" or (r.center_y > body.center_y and r.area >= body.area * 0.03)],
@@ -350,17 +346,17 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     left_leg = next((r for r in legs if r.center_x < body.center_x), None)
     right_leg = next((r for r in legs if r.center_x >= body.center_x), None)
     if left_leg:
-        parts.append(make_part("leftLeg", left_leg.shape, left_leg, width, height))
+        parts.append(make_part("leftLeg", left_leg, width, height))
     if right_leg:
-        parts.append(make_part("rightLeg", right_leg.shape, right_leg, width, height))
+        parts.append(make_part("rightLeg", right_leg, width, height))
 
     ears = sorted([r for r in rem if r.class_hint == "ear" or (head and r.center_y < head.center_y + head.height * 0.2)], key=lambda r: r.area, reverse=True)
     left_ear = next((r for r in ears if r.center_x < body.center_x), None)
     right_ear = next((r for r in ears if r.center_x >= body.center_x), None)
     if left_ear:
-        parts.append(make_part("leftEar", left_ear.shape, left_ear, width, height))
+        parts.append(make_part("leftEar", left_ear, width, height))
     if right_ear:
-        parts.append(make_part("rightEar", right_ear.shape, right_ear, width, height))
+        parts.append(make_part("rightEar", right_ear, width, height))
 
     # NOTE: This adds a default shape to the parts that are missing a pair, which may not be what the user wants.
     add_symmetric(parts, "leftArm", "rightArm", "limb-teardrop")
@@ -370,7 +366,7 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     if not any(p.slotId == "head" for p in parts):
         parts.append(
             PlacedPart(
-                meshId="head-sphere",
+                meshId="sphere",
                 slotId="head",
                 position=Vector3(x=0.0, y=0.0, z=0.0),
                 scale=Vector3(x=1.0, y=1.0, z=1.0),
