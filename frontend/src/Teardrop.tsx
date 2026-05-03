@@ -1,16 +1,13 @@
 import { useMemo } from "react";
-import * as THREE from "three";
 import { Outlines } from "@react-three/drei";
 import {
   addSegmentVertexColorsWithRange,
   TEARDROP_MIN_Y,
   TEARDROP_MAX_Y,
 } from "./segmentColors";
+import { capsuleTeardropGeometry } from "./roundedGeometry";
 
-/** Sphere at origin radius 0.18; cone at y=0.35 with height 0.7, radius 0.18. Cone uses small top radius to avoid black apex. */
-const TEARDROP_SPHERE_RADIUS = 0.18;
-const TEARDROP_CONE_HEIGHT = 0.7;
-const TEARDROP_CONE_POSITION_Y = 0.35;
+const TEARDROP_RADIUS = 0.14;
 
 interface TeardropProps {
   color?: string;
@@ -31,26 +28,21 @@ export function Teardrop({
   segmentCount = 0,
   segmentColors,
 }: TeardropProps) {
-  const sphereGeom = useMemo(
-    () => new THREE.SphereGeometry(TEARDROP_SPHERE_RADIUS, 32, 32),
-    []
-  );
-  const coneGeom = useMemo(
+  const baseGeom = useMemo(
     () =>
-      new THREE.CylinderGeometry(
-        0.001,
-        TEARDROP_SPHERE_RADIUS,
-        TEARDROP_CONE_HEIGHT,
-        32,
-        24
+      capsuleTeardropGeometry(
+        TEARDROP_RADIUS,
+        TEARDROP_MIN_Y,
+        TEARDROP_MAX_Y,
+        36
       ),
     []
   );
 
-  const coloredSphereGeom = useMemo(() => {
+  const coloredGeom = useMemo(() => {
     if (segmentCount <= 0) return null;
     return addSegmentVertexColorsWithRange(
-      sphereGeom.clone(),
+      baseGeom.clone(),
       segmentCount,
       color,
       segmentColors,
@@ -58,79 +50,37 @@ export function Teardrop({
       TEARDROP_MAX_Y,
       0
     );
-  }, [sphereGeom, segmentCount, color, segmentColors]);
+  }, [baseGeom, segmentCount, color, segmentColors]);
 
-  const coloredConeGeom = useMemo(() => {
-    if (segmentCount <= 0) return null;
-    return addSegmentVertexColorsWithRange(
-      coneGeom.clone(),
-      segmentCount,
-      color,
-      segmentColors,
-      TEARDROP_MIN_Y,
-      TEARDROP_MAX_Y,
-      TEARDROP_CONE_POSITION_Y
-    );
-  }, [coneGeom, segmentCount, color, segmentColors]);
-
-  if (segmentCount > 0 && coloredSphereGeom && coloredConeGeom) {
+  if (segmentCount > 0 && coloredGeom) {
     return (
-      <group>
-        <mesh position={[0, TEARDROP_CONE_POSITION_Y, 0]} castShadow receiveShadow>
-          <primitive object={coloredConeGeom} attach="geometry" />
-          <meshStandardMaterial
-            vertexColors
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
-        <mesh position={[0, 0, 0]} castShadow receiveShadow>
-          <primitive object={coloredSphereGeom} attach="geometry" />
-          <meshStandardMaterial
-            vertexColors
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
-      </group>
+      <mesh castShadow receiveShadow>
+        <primitive object={coloredGeom} attach="geometry" />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
+        {showOutline && (
+          <Outlines thickness={outlineThickness} color={outlineColor} />
+        )}
+      </mesh>
     );
   }
 
   return (
-    <group>
-      <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
-        <coneGeometry args={[0.18, 0.7, 32]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={emissive}
-          roughness={0.8}
-          metalness={0.1}
-        />
-        {showOutline && (
-          <Outlines thickness={outlineThickness} color={outlineColor} />
-        )}
-      </mesh>
-
-      <mesh position={[0, 0, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[0.18, 32, 32]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={emissive}
-          roughness={0.8}
-          metalness={0.1}
-        />
-        {showOutline && (
-          <Outlines thickness={outlineThickness} color={outlineColor} />
-        )}
-      </mesh>
-    </group>
+    <mesh castShadow receiveShadow>
+      <primitive object={baseGeom} attach="geometry" />
+      <meshStandardMaterial
+        color={color}
+        emissive={emissive}
+        roughness={0.8}
+        metalness={0.1}
+      />
+      {showOutline && (
+        <Outlines thickness={outlineThickness} color={outlineColor} />
+      )}
+    </mesh>
   );
 }
