@@ -244,12 +244,33 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mes
         parts.append(_mirror_part(right, left_slot))
 
 def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
-    """Approximate a contour to one of the supported shape mesh ids."""
-    approx = cv2.approxPolyDP(contour, epsilon=0.02 * cv2.arcLength(contour, True), closed=True)
-    if len(approx) == 3:
-        return "cone"
-    if len(approx) == 4:
+    """Classify a contour as sphere/cylinder/cone using how full its rotated bounding box is.
+
+    The rotated-bounding-box extent (``area / minAreaRect.area``) cleanly separates the
+    three target shapes regardless of rotation:
+      - Rectangle ~ 1.0
+      - Ellipse / circle ~ pi/4 (~0.785)
+      - Triangle ~ 0.5
+
+    Polygonal approximation is used only as a tiebreaker for triangles, since vertex
+    counts are easily perturbed by small contour noise (e.g. when two regions touch).
+    """
+    area = float(cv2.contourArea(contour))
+    perimeter = float(cv2.arcLength(contour, True))
+    if area <= 0 or perimeter <= 0:
+        return "sphere"
+
+    (_, _), (rw, rh), _ = cv2.minAreaRect(contour)
+    rotated_box_area = max(1.0, float(rw) * float(rh))
+    extent = area / rotated_box_area
+
+    approx = cv2.approxPolyDP(contour, epsilon=0.04 * perimeter, closed=True)
+    vertices = len(approx)
+
+    if extent >= 0.85:
         return "cylinder"
+    if vertices == 3 or extent <= 0.6:
+        return "cone"
     return "sphere"
 
 def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
