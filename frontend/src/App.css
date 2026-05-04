@@ -311,9 +311,9 @@ body {
 
 .save-btn {
   padding: 0.5rem 1rem;
-  background: #e94560;
-  color: #fff;
-  border: none;
+  background: #0f3460;
+  color: #00e5ff;
+  border: 1px solid #1a4a7a;
   border-radius: 6px;
   font-size: 0.9rem;
   cursor: pointer;
@@ -321,7 +321,8 @@ body {
 }
 
 .save-btn:hover:not(:disabled) {
-  background: #ff6b6b;
+  background: #1a4a7a;
+  border-color: #00e5ff;
 }
 
 .save-btn:disabled {
@@ -797,6 +798,11 @@ body {
   border-color: rgba(255, 255, 255, 0.15);
 }
 
+.palette-swatch-added {
+  outline: 2px dashed rgba(255, 255, 255, 0.7);
+  outline-offset: -3px;
+}
+
 .palette-swatch-eyedropper {
   background: rgba(255, 255, 255, 0.08);
   color: #a0b0c0;
@@ -816,6 +822,62 @@ body {
 body.eyedropper-active,
 body.eyedropper-active * {
   cursor: crosshair !important;
+}
+
+.custom-picker-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.1rem 0.1rem;
+  flex-wrap: wrap;
+  flex-basis: 100%;
+  width: 100%;
+}
+
+.custom-picker-input {
+  width: 40px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+}
+
+.custom-picker-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.custom-picker-done,
+.custom-picker-cancel {
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  border: 1px solid;
+}
+
+.custom-picker-done {
+  background: #00e5ff;
+  color: #0d1b2a;
+  border-color: #00e5ff;
+  font-weight: 600;
+}
+
+.custom-picker-done:hover {
+  background: #33eeff;
+}
+
+.custom-picker-cancel {
+  background: transparent;
+  color: #a0b0c0;
+  border-color: rgba(255,255,255,0.18);
+}
+
+.custom-picker-cancel:hover {
+  background: rgba(255,255,255,0.07);
+  color: #fff;
 }
 
 .mirror-part-btn {

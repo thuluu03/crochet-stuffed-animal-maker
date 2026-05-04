@@ -84,7 +84,6 @@ export function ColorPopup() {
   const [tab, setTab] = useState<Tab>("transforms");
   const dragging = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
-  const customColorRef = useRef<HTMLInputElement>(null);
 
   // Live transforms from Three.js world
   const [liveTransform, setLiveTransformState] = useState(getLiveTransform);
@@ -116,6 +115,12 @@ export function ColorPopup() {
   const [lastClickedSeg, setLastClickedSeg] = useState<number | null>(null);
   const [baseSelected, setBaseSelected] = useState(false);
   const [eyedropperActive, setEyedropperActive] = useState(false);
+  const [customColors, setCustomColors] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("customPaletteColors") ?? "[]"); }
+    catch { return []; }
+  });
+  const [customPickerOpen, setCustomPickerOpen] = useState(false);
+  const [pendingColor, setPendingColor] = useState("#ffffff");
 
   useEffect(() => {
     const unsub = subscribeEyedropper(setEyedropperActive);
@@ -412,10 +417,26 @@ export function ColorPopup() {
                   title={hex}
                 />
               ))}
+              {customColors.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  className="palette-swatch palette-swatch-added"
+                  style={{ background: hex }}
+                  onClick={() => applyColor(hex)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    const next = customColors.filter((c) => c !== hex);
+                    setCustomColors(next);
+                    localStorage.setItem("customPaletteColors", JSON.stringify(next));
+                  }}
+                  title={`Custom: ${hex} (right-click to remove)`}
+                />
+              ))}
               <button
                 type="button"
                 className="palette-swatch palette-swatch-custom"
-                onClick={() => customColorRef.current?.click()}
+                onClick={() => { setCustomPickerOpen(true); setPendingColor("#ffffff"); }}
                 title="Custom color"
               >
                 +
@@ -434,12 +455,40 @@ export function ColorPopup() {
               >
                 ◉
               </button>
-              <input
-                ref={customColorRef}
-                type="color"
-                style={{ display: "none", position: "absolute" }}
-                onChange={(e) => applyColor(e.target.value)}
-              />
+              {customPickerOpen && (
+                <div className="custom-picker-panel">
+                  <input
+                    type="color"
+                    className="custom-picker-input"
+                    value={pendingColor}
+                    onChange={(e) => setPendingColor(e.target.value)}
+                  />
+                  <div className="custom-picker-actions">
+                    <button
+                      type="button"
+                      className="custom-picker-done"
+                      onClick={() => {
+                        applyColor(pendingColor);
+                        if (!PALETTE_COLORS.includes(pendingColor) && !customColors.includes(pendingColor)) {
+                          const next = [...customColors, pendingColor];
+                          setCustomColors(next);
+                          localStorage.setItem("customPaletteColors", JSON.stringify(next));
+                        }
+                        setCustomPickerOpen(false);
+                      }}
+                    >
+                      Done
+                    </button>
+                    <button
+                      type="button"
+                      className="custom-picker-cancel"
+                      onClick={() => setCustomPickerOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
