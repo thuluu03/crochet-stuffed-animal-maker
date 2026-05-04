@@ -502,7 +502,7 @@ function PartGeometry({
     case "cylinder":
       return (
         <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.16, 0.16, 0.5, 20]} />
+          <cylinderGeometry args={[0.2, 0.2, 0.4, 20]} />
           <meshStandardMaterial
             color={color}
             roughness={0.8}

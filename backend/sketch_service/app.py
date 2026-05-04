@@ -187,11 +187,11 @@ _MIN_SCALE = 0.05
 
 
 # Local half-extents of each shape mesh, sourced from the geometry args in
-# ``frontend/src/components/PartMesh.tsx`` (sphere r=0.24, cylinder r=0.16 h=0.5,
+# ``frontend/src/components/PartMesh.tsx`` (sphere r=0.24, cylinder r=0.2 h=0.4,
 # cone base r=0.2 h=0.5). Each tuple is (half_x, half_y, half_z) before scale.
 _MESH_LOCAL_HALF_EXTENTS: dict[str, tuple[float, float, float]] = {
     "sphere": (0.24, 0.24, 0.24),
-    "cylinder": (0.16, 0.25, 0.16),
+    "cylinder": (0.20, 0.20, 0.20),
     "cone": (0.20, 0.25, 0.20),
 }
 

@@ -133,7 +133,7 @@ export function getBaseGeometry(meshId: string): THREE.BufferGeometry | null {
     case "sphere":
       return new THREE.SphereGeometry(0.24, 24, 18);
     case "cylinder":
-      return new THREE.CylinderGeometry(0.16, 0.16, 0.5, 20, 24); // 4th argument is segments
+      return new THREE.CylinderGeometry(0.2, 0.2, 0.4, 20, 24); // 4th argument is segments
     case "cone":
       // return new THREE.ConeGeometry(0.2, 0.5, 20, 24); // 4th argument is segments
       return new THREE.CylinderGeometry(0.001, 0.2, 0.5, 20, 24); // 4th argument is segments
