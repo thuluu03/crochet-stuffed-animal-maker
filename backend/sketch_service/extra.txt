@@ -3,7 +3,7 @@ Some rules to keep in mind:
     - apex of limbs are designated to be pointed to the body 
     - apex of the body and head are +y
 - for rectangles
-    - the 
+- handles some clipping, but ideally, the images should not have a lot of overlaps 
 
 - keep the default rotations (rotation parameter)
 - in map_regions, change the rotation to use region.orientation if it's not a fallback 

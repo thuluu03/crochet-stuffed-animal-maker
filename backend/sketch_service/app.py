@@ -184,6 +184,30 @@ _DIM_SCALE = 4.0
 _MIN_SCALE = 0.05
 
 
+# Local half-extents of each shape mesh, sourced from the geometry args in
+# ``frontend/src/components/PartMesh.tsx`` (sphere r=0.24, cylinder r=0.16 h=0.5,
+# cone base r=0.2 h=0.5). Each tuple is (half_x, half_y, half_z) before scale.
+_MESH_LOCAL_HALF_EXTENTS: dict[str, tuple[float, float, float]] = {
+    "sphere": (0.24, 0.24, 0.24),
+    "cylinder": (0.16, 0.25, 0.16),
+    "cone": (0.20, 0.25, 0.20),
+}
+
+
+# World position of every mannequin slot, mirroring ``MANNEQUIN_SLOTS`` in
+# ``frontend/src/presets.ts``. Used to compute touch offsets in ``_anchor_parts``.
+_SLOT_POSITION: dict[str, tuple[float, float, float]] = {
+    "head": (0.0, 0.62, 0.0),
+    "body": (0.0, 0.0, 0.0),
+    "leftArm": (-0.5, 0.0, 0.0),
+    "rightArm": (0.5, 0.0, 0.0),
+    "leftLeg": (-0.16, -0.64, 0.0),
+    "rightLeg": (0.16, -0.64, 0.0),
+    "leftEar": (-0.18, 0.96, 0.0),
+    "rightEar": (0.18, 0.96, 0.0),
+}
+
+
 def normalized_dim(px: float, image_max: int) -> float:
     """Convert a pixel size to a 3D scale value with a small floor."""
     image_max = max(1, int(image_max))
@@ -281,6 +305,103 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str) -> N
         parts.append(_mirror_part(left, right_slot))
     elif right and not left:
         parts.append(_mirror_part(right, left_slot))
+
+
+def _world_aabb_half_extents(part: PlacedPart) -> tuple[float, float, float]:
+    """World-axis-aligned half-extents of a part after scale + Z rotation.
+
+    The mesh is approximated by its local bounding box (see ``_MESH_LOCAL_HALF_EXTENTS``)
+    so we can compute touch offsets without a full collision check. Steps:
+
+    1. Apply the per-axis scale to the local half-extents.
+    2. Rotate the X/Y rectangle by ``rotation.z``. The bounding box of an axis-aligned
+       rectangle rotated by angle ``t`` has half-extents
+       ``(|sx*cos t| + |sy*sin t|, |sx*sin t| + |sy*cos t|)``, which is what we use.
+    3. Z is unaffected by a Z rotation.
+    """
+    base = _MESH_LOCAL_HALF_EXTENTS.get(part.meshId, (0.24, 0.24, 0.24))
+    sx = part.scale.x * base[0]
+    sy = part.scale.y * base[1]
+    sz = part.scale.z * base[2]
+    cos_t = abs(math.cos(part.rotation.z))
+    sin_t = abs(math.sin(part.rotation.z))
+    return sx * cos_t + sy * sin_t, sx * sin_t + sy * cos_t, sz
+
+
+def _anchor_parts(parts: list[PlacedPart]) -> None:
+    """Push each placed part's offset so it just touches its anchor part.
+
+    Touch rules: the head sits on the body, arms attach to the body's sides, legs
+    hang from the body's bottom, and ears sit on the head. Each adjustment uses the
+    rotated, scaled AABB of both the part and its anchor so the surfaces meet
+    without significant overlap.
+
+    Order matters because ears depend on the head's already-anchored position:
+      body -> head -> arms / legs -> ears.
+
+    Mutates each ``PlacedPart``'s ``position`` in place. ``part.position`` is the
+    offset from the slot anchor in world space, matching how the frontend renders
+    parts (``slotPosition + part.position``).
+    """
+    by_slot = {p.slotId: p for p in parts}
+    body = by_slot.get("body")
+    if body is None:
+        return
+
+    body_x, body_y, _ = _SLOT_POSITION["body"]
+    body_ex, body_ey, _ = _world_aabb_half_extents(body)
+    body_top = body_y + body_ey
+    body_bottom = body_y - body_ey
+    body_left = body_x - body_ex
+    body_right = body_x + body_ex
+
+    head = by_slot.get("head")
+    if head is not None:
+        _, head_ey, _ = _world_aabb_half_extents(head)
+        head.position = Vector3(
+            x=0.0,
+            y=(body_top + head_ey) - _SLOT_POSITION["head"][1],
+            z=0.0,
+        )
+
+    for slot_id, target_x, sign in (
+        ("leftArm", body_left, -1),
+        ("rightArm", body_right, +1),
+    ):
+        arm = by_slot.get(slot_id)
+        if arm is None:
+            continue
+        arm_ex, _, _ = _world_aabb_half_extents(arm)
+        arm.position = Vector3(
+            x=(target_x + sign * arm_ex) - _SLOT_POSITION[slot_id][0],
+            y=0.0,
+            z=0.0,
+        )
+
+    for slot_id in ("leftLeg", "rightLeg"):
+        leg = by_slot.get(slot_id)
+        if leg is None:
+            continue
+        _, leg_ey, _ = _world_aabb_half_extents(leg)
+        leg.position = Vector3(
+            x=0.0,
+            y=(body_bottom - leg_ey) - _SLOT_POSITION[slot_id][1],
+            z=0.0,
+        )
+
+    if head is not None:
+        _, head_ey, _ = _world_aabb_half_extents(head)
+        head_world_top = _SLOT_POSITION["head"][1] + head.position.y + head_ey
+        for slot_id in ("leftEar", "rightEar"):
+            ear = by_slot.get(slot_id)
+            if ear is None:
+                continue
+            _, ear_ey, _ = _world_aabb_half_extents(ear)
+            ear.position = Vector3(
+                x=ear.position.x,
+                y=(head_world_top + ear_ey) - _SLOT_POSITION[slot_id][1],
+                z=ear.position.z,
+            )
 
 
 def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
@@ -389,6 +510,8 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     4. Mirror any side that is missing its pair via ``add_symmetric``.
     5. Add a default sphere head if no head was detected so the mannequin is never
        headless.
+    6. Anchor each placed part (``_anchor_parts``) so adjacent surfaces touch
+       without significant overlap, using each part's rotated, scaled AABB.
 
     Assumes ``regions`` come from ``extract_regions``: every ``class_hint`` is set
     and the list is sorted by area (largest first).
@@ -431,6 +554,8 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
                 color=DEFAULT_COLOR,
             )
         )
+
+    _anchor_parts(parts)
     return parts
 
 
