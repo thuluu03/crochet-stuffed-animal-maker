@@ -37,7 +37,7 @@ export const MESH_DIMENSIONS: Record<string, MeshDimensionEntry> = {
   "ear-teardrop": { connectivityRadius: 0.2, height: 0.24, tubeRadius: 0.1 },
   tail: { connectivityRadius: 0.2, height: 0.35, tubeRadius: 0.08 },
   sphere: { connectivityRadius: 0.24 },
-  cylinder: { connectivityRadius: 0.28, height: 0.48, tubeRadius: 0.26 },
+  cylinder: { connectivityRadius: 0.21, height: 0.4, tubeRadius: 0.2 },
   cone: { connectivityRadius: 0.28, height: 0.45, tubeRadius: 0.1 },
   "custom-teardrop": {
     connectivityRadius: 0.4,

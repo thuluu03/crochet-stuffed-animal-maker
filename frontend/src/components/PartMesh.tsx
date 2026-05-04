@@ -680,9 +680,9 @@ function PartGeometry({
     case "cylinder":
       return (
         <RoundedCylinderMesh
-          topRadius={0.16}
-          bottomRadius={0.16}
-          height={0.5}
+          topRadius={0.2}
+          bottomRadius={0.2}
+          height={0.4}
           radialSegments={28}
           color={color}
           emissive={emissive}
