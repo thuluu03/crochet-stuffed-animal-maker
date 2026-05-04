@@ -186,12 +186,17 @@ _DIM_SCALE = 4.0
 _MIN_SCALE = 0.05
 
 
-# Local half-extents of each shape mesh, sourced from the geometry args in
-# ``frontend/src/components/PartMesh.tsx`` (sphere r=0.24, cylinder r=0.2 h=0.4,
-# cone base r=0.2 h=0.5). Each tuple is (half_x, half_y, half_z) before scale.
+# Local half-extents of each shape mesh before scale, aligned with
+# ``frontend/src/components/PartMesh.tsx`` and ``segmentColors.getBaseGeometry``.
+#
+# ``cylinder`` uses ``roundedCylinderGeometry(0.2, 0.2, 0.4, 28)``: height gives
+# half_y = 0.2 exactly; cap shoulders bulge slightly past the 0.2 radius, so
+# half_x / half_z match the Three.js axis-aligned bounding box (~0.20576).
+_CYLINDER_MESH_HALF_XZ = 0.20576
+_CYLINDER_MESH_HALF_Y = 0.2
 _MESH_LOCAL_HALF_EXTENTS: dict[str, tuple[float, float, float]] = {
     "sphere": (0.24, 0.24, 0.24),
-    "cylinder": (0.20, 0.20, 0.20),
+    "cylinder": (_CYLINDER_MESH_HALF_XZ, _CYLINDER_MESH_HALF_Y, _CYLINDER_MESH_HALF_XZ),
     "cone": (0.20, 0.25, 0.20),
 }
 
@@ -265,9 +270,13 @@ def part_rotation(slot_id: str, region: Region) -> Vector3:
     - ``sphere``: no rotation (isotropic mesh).
     - ``cone``: defaults to apex-up. For limb slots (arm/leg), the apex is rotated
       to point toward the body so the limb attaches by its wide base.
-    - ``cylinder``: rotate around Z so the mesh axis (+Y) lines up with the
-      rectangle's long axis. This places the circular caps at the short-side ends.
+    - ``cylinder``: for body and head, stay upright (no Z rotation) so a sketch
+      body never appears tilted from noisy PCA on an almost-axis-aligned rectangle.
+      For limbs, rotate around Z so the mesh axis (+Y) lines up with the contour's
+      long axis so caps sit on the short sides.
     """
+    if region.shape == "cylinder" and slot_id in ("body", "head"):
+        return Vector3(x=0.0, y=0.0, z=0.0)
     if region.shape == "cylinder":
         return Vector3(x=0.0, y=0.0, z=region.orientation - math.pi / 2)
     if region.shape == "cone":
@@ -425,6 +434,28 @@ def _anchor_bottom_y_at_x(anchor: PlacedPart, x_world: float) -> float:
     return cy - sy
 
 
+def _anchor_bottom_y_in_x_span(anchor: PlacedPart, x_lo: float, x_hi: float) -> float:
+    """Lowest bottom-surface world y of the anchor under ``[x_lo, x_hi]``.
+
+    Used for legs: the foot may span several world-x values. On a sphere (or any
+    bottom that is not flat in x), the deepest point under that span is the
+    correct contact height so the whole leg top clears the body. We sample the
+    span densely (nine points plus the anchor center when it lies inside) so a
+    wide leg AABB does not miss the deepest part of the curved bottom.
+    """
+    if x_lo > x_hi:
+        x_lo, x_hi = x_hi, x_lo
+    cx, _, _, _, _ = _anchor_local_extents(anchor)
+    span = x_hi - x_lo
+    samples: set[float] = set()
+    for i in range(9):
+        t = 0.0 if span <= 0.0 else i / 8.0
+        samples.add(x_lo + t * span)
+    if x_lo <= cx <= x_hi:
+        samples.add(cx)
+    return min(_anchor_bottom_y_at_x(anchor, x) for x in samples)
+
+
 def _anchor_parts(parts: list[PlacedPart]) -> None:
     """Push each placed part's offset so its surface just touches its anchor part.
 
@@ -486,10 +517,12 @@ def _anchor_parts(parts: list[PlacedPart]) -> None:
         leg = by_slot.get(slot_id)
         if leg is None:
             continue
-        _, leg_ey, _ = _world_aabb_half_extents(leg)
+        leg_ex, leg_ey, _ = _world_aabb_half_extents(leg)
         leg_slot_x, leg_slot_y, _ = _SLOT_POSITION[slot_id]
         leg_x_world = leg_slot_x + leg.position.x
-        body_bottom = _anchor_bottom_y_at_x(body, leg_x_world)
+        x_lo = leg_x_world - leg_ex
+        x_hi = leg_x_world + leg_ex
+        body_bottom = _anchor_bottom_y_in_x_span(body, x_lo, x_hi)
         leg.position = Vector3(
             x=leg.position.x,
             y=(body_bottom - leg_ey) - leg_slot_y,
@@ -622,7 +655,8 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
     5. Add a default sphere head if no head was detected so the mannequin is never
        headless.
     6. Anchor each placed part (``_anchor_parts``) so adjacent surfaces touch
-       without significant overlap, using each part's rotated, scaled AABB.
+       without significant overlap, using shape-aware surfaces and each part's
+       rotated, scaled AABB (legs use the lowest body bottom across the leg's x span).
 
     Assumes ``regions`` come from ``extract_regions``: every ``class_hint`` is set
     and the list is sorted by area (largest first).

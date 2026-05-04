@@ -19,7 +19,7 @@ const MESH_RADIUS: Record<string, number> = {
   "ear-teardrop": 0.20,
   "tail": 0.20,
   "sphere": 0.24,
-  "cylinder": 0.28,
+  "cylinder": 0.21,
   "cone": 0.28,
   "custom-teardrop": 0.40,
   "body-custom-teardrop": 0.44,
