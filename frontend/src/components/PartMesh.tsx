@@ -340,7 +340,6 @@ function CustomTeardropGLTF({
     );
   }, [normalized, segmentCount, color, rowColors]);
 
-<<<<<<< HEAD
   const meshes = normalized.geometries.map((geom, i) => {
     const sc = coloredGeoms?.[i];
     return (
@@ -354,30 +353,6 @@ function CustomTeardropGLTF({
       </mesh>
     );
   });
-=======
-  const meshes = (coloredGeoms ?? normalized.geometries).map((geom, i) => (
-    <mesh key={i} geometry={geom} castShadow receiveShadow>
-      {coloredGeoms ? (
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.8}
-          metalness={0.1}
-          emissive={emissive}
-        />
-      ) : (
-        <meshStandardMaterial
-          color={color}
-          emissive={emissive}
-          roughness={0.8}
-          metalness={0.1}
-        />
-      )}
-      {showOutline && (
-        <Outlines thickness={outlineThickness} color={outlineColor} />
-      )}
-    </mesh>
-  ));
->>>>>>> 8af57933e2141b89b0175199bcaf09f463597d20
 
   const hatchOverlays =
     highlightSegments && normalized.bounds
