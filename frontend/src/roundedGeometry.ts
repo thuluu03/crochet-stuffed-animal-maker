@@ -71,6 +71,81 @@ export function roundedCylinderGeometry(
   return geometry;
 }
 
+export function roundedConeGeometry(
+  baseRadius: number,
+  height: number,
+  radialSegments = 28,
+  sideSegments = 8,
+  cornerRatio = 0.16,
+  tipFrac = 0.13,
+): THREE.BufferGeometry {
+  const halfHeight = height / 2;
+  const corner = Math.min(halfHeight * 0.42, baseRadius * cornerRatio);
+  const edgeBulge = corner * 0.18;
+
+  // Reserve a small cap near the apex and blend into it with a tangent-matched
+  // cubic curve so the tip stays cone-like, but doesn't end in a hard spike.
+  const tipCapHeight = tipFrac * height;
+  const tipStartY = halfHeight - tipCapHeight;
+  const sideSlope = (baseRadius + edgeBulge) / height;
+  const tipR = tipCapHeight * sideSlope;
+
+  const points: THREE.Vector2[] = [];
+
+  points.push(new THREE.Vector2(0, -halfHeight));
+  points.push(new THREE.Vector2(Math.max(baseRadius - corner, 0.001), -halfHeight));
+
+  // Bottom rounding arc
+  for (let i = 1; i <= sideSegments; i++) {
+    const t = i / sideSegments;
+    const angle = -Math.PI / 2 + t * (Math.PI / 2);
+    const radius = baseRadius - corner + (corner + edgeBulge) * Math.cos(angle);
+    const y = -halfHeight + corner + corner * Math.sin(angle);
+    points.push(new THREE.Vector2(radius, y));
+  }
+
+  // Straight cone side up to the tip cap start
+  const sideStartY = -halfHeight + corner;
+  if (tipStartY > sideStartY + 0.001) {
+    const midY = (sideStartY + tipStartY) / 2;
+    const midR = (halfHeight - midY) * (baseRadius + edgeBulge) / height;
+    points.push(new THREE.Vector2(midR, midY));
+    points.push(new THREE.Vector2(tipR, tipStartY));
+  }
+
+  // Cubic tip dome: tangent to the cone side at the join, then flattening
+  // into the apex so the silhouette reads slightly rounder.
+  const handleX = tipR * 0.46;
+  const handleY = handleX / sideSlope;
+  const p0 = new THREE.Vector2(tipR, tipStartY);
+  const p1 = new THREE.Vector2(
+    Math.max(tipR - handleX, 0.001),
+    tipStartY + handleY,
+  );
+  const p2 = new THREE.Vector2(tipR * 0.16, halfHeight);
+  const p3 = new THREE.Vector2(0, halfHeight);
+  const nDome = Math.max(sideSegments, 10);
+  for (let i = 1; i <= nDome; i++) {
+    const t = i / nDome;
+    const mt = 1 - t;
+    const radius =
+      mt * mt * mt * p0.x +
+      3 * mt * mt * t * p1.x +
+      3 * mt * t * t * p2.x +
+      t * t * t * p3.x;
+    const y =
+      mt * mt * mt * p0.y +
+      3 * mt * mt * t * p1.y +
+      3 * mt * t * t * p2.y +
+      t * t * t * p3.y;
+    points.push(new THREE.Vector2(radius, y));
+  }
+
+  const geometry = new THREE.LatheGeometry(points, radialSegments);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 export function capsuleTeardropGeometry(
   radius = 0.14,
   minY = -0.18,

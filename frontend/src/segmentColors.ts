@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { roundedCylinderGeometry } from "./roundedGeometry";
+import { roundedCylinderGeometry, roundedConeGeometry } from "./roundedGeometry";
 
 function hexToRgb(hex: string): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
@@ -114,7 +114,7 @@ export function getBaseGeometry(meshId: string): THREE.BufferGeometry | null {
     case "body-cylinder":
       return roundedCylinderGeometry(0.34, 0.4, 0.82, 36);
     case "body-cone":
-      return new THREE.CylinderGeometry(0.001, 0.4, 0.82, 28, 24);
+      return roundedConeGeometry(0.4, 0.82, 28);
     case "limb-sphere":
       return new THREE.SphereGeometry(0.15, 20, 16);
     case "limb-cylinder":
@@ -125,7 +125,7 @@ export function getBaseGeometry(meshId: string): THREE.BufferGeometry | null {
       return roundedCylinderGeometry(0.07, 0.07, 0.24, 24);
     case "ear":
     case "ear-cone":
-      return new THREE.CylinderGeometry(0.001, 0.12, 0.3, 18, 24);
+      return roundedConeGeometry(0.12, 0.3, 18);
     case "ear-circle":
       return roundedCylinderGeometry(0.14, 0.14, 0.035, 32);
     case "tail":
@@ -135,7 +135,7 @@ export function getBaseGeometry(meshId: string): THREE.BufferGeometry | null {
     case "cylinder":
       return roundedCylinderGeometry(0.16, 0.16, 0.5, 28);
     case "cone":
-      return new THREE.CylinderGeometry(0.001, 0.2, 0.5, 20, 24);
+      return roundedConeGeometry(0.2, 0.5, 20);
     default:
       return new THREE.BoxGeometry(0.3, 0.3, 0.3);
   }
