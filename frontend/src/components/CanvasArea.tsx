@@ -71,6 +71,9 @@ export function CanvasArea() {
           setDragData={setDragData}
         />
       </Canvas>
+      <div className="canvas-shortcut-tip" role="note" aria-label="Keyboard shortcuts">
+        <strong>Shortcuts</strong>: T move, R rotate, S scale, Ctrl/Cmd+Z undo
+      </div>
       {dragData && (
         <div className="drop-hint">Drop on a highlighted slot to attach the part</div>
       )}
