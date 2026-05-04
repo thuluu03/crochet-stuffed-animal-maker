@@ -27,8 +27,8 @@ export const PART_SECTIONS = [
       { id: "body-cone", label: "Cone Body", slotKind: "body" },
       { id: "body-cylinder", label: "Cylinder Body", slotKind: "body" },
       // { id: "body-pill", label: "Pill Body", slotKind: "body" },
-      { id: "body-teardrop", label: "Teardrop Body", slotKind: "body" },
-      { id: "body-custom-teardrop", label: "Custom Teardrop Body", slotKind: "body" },
+      { id: "body-teardrop", label: "Capsule Body", slotKind: "body" },
+      { id: "body-custom-teardrop", label: "Custom Capsule Body", slotKind: "body" },
     ],
   },
   {
@@ -37,7 +37,7 @@ export const PART_SECTIONS = [
     items: [
       { id: "limb-sphere", label: "Ball Limb", slotKind: "limb" },
       { id: "limb-cylinder", label: "Cylinder Limb", slotKind: "limb" },
-      { id: "limb-teardrop", label: "Teardrop Limb", slotKind: "limb" },
+      { id: "limb-teardrop", label: "Capsule Limb", slotKind: "limb" },
     ],
   },
   {
@@ -48,7 +48,7 @@ export const PART_SECTIONS = [
       { id: "ear-cylinder", label: "Tube Ear", slotKind: "ear" },
       { id: "ear-cone", label: "Horns", slotKind: "ear" },
       { id: "ear-circle", label: "Circular Ear", slotKind: "ear" },
-      { id: "ear-teardrop", label: "Teardrop Ear", slotKind: "ear" },
+      { id: "ear-teardrop", label: "Capsule Ear", slotKind: "ear" },
     ],
   },
 ];
@@ -57,7 +57,7 @@ export const SHAPES = [
   { id: "sphere", label: "Sphere", slotKind: "shape" },
   { id: "cylinder", label: "Cylinder", slotKind: "shape" },
   { id: "cone", label: "Cone", slotKind: "shape" },
-  { id: "custom-teardrop", label: "Custom Teardrop", slotKind: "shape" },
+  { id: "custom-teardrop", label: "Custom Capsule", slotKind: "shape" },
 ];
 
 /** Mannequin attachment slots (positions in local space of mannequin) */
@@ -79,28 +79,28 @@ export const MANNEQUIN_SLOTS: MannequinSlot[] = [
   {
     id: "leftArm",
     label: "Left Arm",
-    position: [-0.5, 0, 0],
-    rotation: [0, 0, -Math.PI / 4],
+    position: [-0.44, 0.12, 0],
+    rotation: [0, 0, Math.PI / 2 + Math.PI / 12],
     accepts: ["limb", "shape"],
   },
   {
     id: "rightArm",
     label: "Right Arm",
-    position: [0.5, 0, 0],
-    rotation: [0, 0, Math.PI / 4],
+    position: [0.44, 0.12, 0],
+    rotation: [0, 0, -Math.PI / 2 - Math.PI / 12],
     accepts: ["limb", "shape"],
   },
   {
     id: "leftLeg",
     label: "Left Leg",
-    position: [-0.16, -0.64, 0],
+    position: [-0.16, -0.515, 0],
     rotation: [0, 0, 0],
     accepts: ["limb", "shape"],
   },
   {
     id: "rightLeg",
     label: "Right Leg",
-    position: [0.16, -0.64, 0],
+    position: [0.16, -0.515, 0],
     rotation: [0, 0, 0],
     accepts: ["limb", "shape"],
   },

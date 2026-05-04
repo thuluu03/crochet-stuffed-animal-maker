@@ -1,7 +1,12 @@
 import { useMemo, useRef, useEffect } from "react";
 import type { PlacedPart } from "../types";
 import { Teardrop } from "../Teardrop";
-import { Outlines, useCursor, TransformControls, useGLTF } from "@react-three/drei";
+import {
+  Outlines,
+  useCursor,
+  TransformControls,
+  useGLTF,
+} from "@react-three/drei";
 import { useState } from "react";
 import { useFrame, createPortal, useThree } from "@react-three/fiber";
 import {
@@ -10,10 +15,25 @@ import {
   getBaseGeometry,
   isTeardropType,
 } from "../segmentColors";
-import { getSegmentCount } from "../presets";
+import {
+  roundedCapsuleGeometry,
+  roundedCylinderGeometry,
+} from "../roundedGeometry";
 import * as THREE from "three";
-import { setLiveScale, setLivePosition, setLiveRotation, resetLiveScale } from "../liveTransformStore";
-import { getTransformMode, subscribeTransformMode } from "../transformModeStore";
+import { computePatternRowCount } from "../patternRowCount";
+import {
+  setLiveScale,
+  setLivePosition,
+  setLiveRotation,
+  resetLiveScale,
+} from "../liveTransformStore";
+import {
+  getTransformMode,
+  subscribeTransformMode,
+} from "../transformModeStore";
+import { getHighlight, subscribeHighlight } from "../highlightStore";
+import { isEyedropperActive, pickEyedropperColor } from "../eyedropperStore";
+import { SegmentHatch } from "./SegmentHatch";
 
 interface PartMeshProps {
   part: PlacedPart;
@@ -21,7 +41,9 @@ interface PartMeshProps {
   selected: boolean;
   onClick: () => void;
   onHover: () => void;
-  onTransformCommit: (updates: Partial<Pick<PlacedPart, "position" | "rotation" | "scale">>) => void;
+  onTransformCommit: (
+    updates: Partial<Pick<PlacedPart, "position" | "rotation" | "scale">>,
+  ) => void;
 }
 
 interface PartGeometryProps {
@@ -33,6 +55,7 @@ interface PartGeometryProps {
   outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
+  highlightSegments?: number[];
 }
 
 /** Renders a mesh with vertex colors by segment (horizontal bands). */
@@ -45,6 +68,7 @@ function SegmentColoredMesh({
   showOutline,
   outlineColor,
   outlineThickness,
+  highlightSegments,
 }: {
   meshId: string;
   segmentCount: number;
@@ -54,8 +78,15 @@ function SegmentColoredMesh({
   showOutline: boolean;
   outlineColor: string;
   outlineThickness: number;
+  highlightSegments?: number[];
 }) {
   const baseGeom = useMemo(() => getBaseGeometry(meshId), [meshId]);
+  const yBounds = useMemo(() => {
+    if (!baseGeom) return null;
+    baseGeom.computeBoundingBox();
+    const bb = baseGeom.boundingBox!;
+    return { yMin: bb.min.y, yMax: bb.max.y };
+  }, [baseGeom]);
   const coloredGeom = useMemo(() => {
     if (!baseGeom || segmentCount <= 0) return baseGeom;
     return addSegmentVertexColors(
@@ -68,11 +99,70 @@ function SegmentColoredMesh({
 
   if (!coloredGeom) return null;
 
+  const rotation: [number, number, number] | undefined =
+    meshId === "ear-circle" ? [Math.PI / 2, 0, 0] : undefined;
+
   return (
-    <mesh castShadow receiveShadow>
-      <primitive object={coloredGeom} attach="geometry" />
+    <group>
+      <mesh rotation={rotation} castShadow receiveShadow>
+        <primitive object={coloredGeom} attach="geometry" />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
+        {showOutline && (
+          <Outlines thickness={outlineThickness} color={outlineColor} />
+        )}
+      </mesh>
+      {highlightSegments && baseGeom && yBounds && (
+        <SegmentHatch
+          geometry={baseGeom}
+          segmentCount={segmentCount}
+          yMin={yBounds.yMin}
+          yMax={yBounds.yMax}
+          rotation={rotation}
+          highlightSegments={highlightSegments}
+        />
+      )}
+    </group>
+  );
+}
+
+function RoundedCylinderMesh({
+  topRadius,
+  bottomRadius,
+  height,
+  radialSegments,
+  color,
+  emissive,
+  showOutline,
+  outlineColor,
+  outlineThickness,
+  rotation,
+}: {
+  topRadius: number;
+  bottomRadius: number;
+  height: number;
+  radialSegments: number;
+  color: string;
+  emissive: string;
+  showOutline: boolean;
+  outlineColor: string;
+  outlineThickness: number;
+  rotation?: [number, number, number];
+}) {
+  const geometry = useMemo(
+    () =>
+      roundedCylinderGeometry(topRadius, bottomRadius, height, radialSegments),
+    [topRadius, bottomRadius, height, radialSegments],
+  );
+
+  return (
+    <mesh geometry={geometry} rotation={rotation} castShadow receiveShadow>
       <meshStandardMaterial
-        vertexColors
+        color={color}
         roughness={0.8}
         metalness={0.1}
         emissive={emissive}
@@ -81,6 +171,66 @@ function SegmentColoredMesh({
         <Outlines thickness={outlineThickness} color={outlineColor} />
       )}
     </mesh>
+  );
+}
+
+function RoundedCapsuleMesh({
+  color,
+  emissive,
+  showOutline,
+  outlineColor,
+  outlineThickness,
+  segmentCount,
+  rowColors,
+  highlightSegments,
+}: {
+  color: string;
+  emissive: string;
+  showOutline: boolean;
+  outlineColor: string;
+  outlineThickness: number;
+  segmentCount: number;
+  rowColors?: Record<number, string>;
+  highlightSegments?: number[];
+}) {
+  const baseGeom = useMemo(
+    () => roundedCapsuleGeometry(0.29, -0.38, 0.38, 36),
+    [],
+  );
+  const coloredGeom = useMemo(() => {
+    if (segmentCount <= 0) return null;
+    return addSegmentVertexColors(
+      baseGeom.clone(),
+      segmentCount,
+      color,
+      rowColors,
+    );
+  }, [baseGeom, segmentCount, color, rowColors]);
+
+  return (
+    <group>
+      <mesh geometry={coloredGeom ?? baseGeom} castShadow receiveShadow>
+        <meshStandardMaterial
+          color={coloredGeom ? undefined : color}
+          vertexColors={!!coloredGeom}
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
+        {showOutline && (
+          <Outlines thickness={outlineThickness} color={outlineColor} />
+        )}
+      </mesh>
+      {highlightSegments && (
+        <SegmentHatch
+          geometry={baseGeom}
+          segmentCount={segmentCount}
+          yMin={-0.38}
+          yMax={0.38}
+          highlightSegments={highlightSegments}
+        />
+      )}
+    </group>
   );
 }
 
@@ -98,6 +248,7 @@ function CustomTeardropGLTF({
   outlineThickness,
   segmentCount,
   rowColors,
+  highlightSegments,
 }: {
   color: string;
   emissive: string;
@@ -106,6 +257,7 @@ function CustomTeardropGLTF({
   outlineThickness: number;
   segmentCount: number;
   rowColors?: Record<number, string>;
+  highlightSegments?: number[];
 }) {
   const { scene } = useGLTF(CUSTOM_TEARDROP_URL);
 
@@ -160,7 +312,7 @@ function CustomTeardropGLTF({
     const scaleMatrix = new THREE.Matrix4().makeScale(
       uniformScale,
       uniformScale,
-      uniformScale
+      uniformScale,
     );
     const translateMatrix = new THREE.Matrix4().makeTranslation(tx, ty, tz);
 
@@ -195,23 +347,54 @@ function CustomTeardropGLTF({
         rowColors,
         minY,
         maxY,
-        0
-      )
+        0,
+      ),
     );
   }, [normalized, segmentCount, color, rowColors]);
 
   const meshes = (coloredGeoms ?? normalized.geometries).map((geom, i) => (
     <mesh key={i} geometry={geom} castShadow receiveShadow>
       {coloredGeoms ? (
-        <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.8}
+          metalness={0.1}
+          emissive={emissive}
+        />
       ) : (
-        <meshStandardMaterial color={color} emissive={emissive} roughness={0.8} metalness={0.1} />
+        <meshStandardMaterial
+          color={color}
+          emissive={emissive}
+          roughness={0.8}
+          metalness={0.1}
+        />
       )}
-      {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
+      {showOutline && (
+        <Outlines thickness={outlineThickness} color={outlineColor} />
+      )}
     </mesh>
   ));
 
-  return <group>{meshes}</group>;
+  const hatchOverlays =
+    highlightSegments && normalized.bounds
+      ? normalized.geometries.map((geom, i) => (
+          <SegmentHatch
+            key={`hatch-${i}`}
+            geometry={geom}
+            segmentCount={segmentCount}
+            yMin={normalized.bounds!.min.y}
+            yMax={normalized.bounds!.max.y}
+            highlightSegments={highlightSegments}
+          />
+        ))
+      : null;
+
+  return (
+    <group>
+      {meshes}
+      {hatchOverlays}
+    </group>
+  );
 }
 
 /** Renders a single body part geometry by preset id */
@@ -224,6 +407,7 @@ function PartGeometry({
   outlineThickness,
   segmentCount,
   rowColors,
+  highlightSegments,
 }: PartGeometryProps) {
   if (
     segmentCount > 0 &&
@@ -240,6 +424,7 @@ function PartGeometry({
         showOutline={showOutline}
         outlineColor={outlineColor}
         outlineThickness={outlineThickness}
+        highlightSegments={highlightSegments}
       />
     );
   }
@@ -263,18 +448,17 @@ function PartGeometry({
       );
     case "head-cylinder":
       return (
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.22, 0.26, 0.46, 24]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.22}
+          bottomRadius={0.26}
+          height={0.46}
+          radialSegments={32}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+        />
       );
     case "body-sphere":
       return (
@@ -294,18 +478,17 @@ function PartGeometry({
     case "body":
     case "body-cylinder":
       return (
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.34, 0.4, 0.82, 28]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.34}
+          bottomRadius={0.4}
+          height={0.82}
+          radialSegments={36}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+        />
       );
     case "body-cone":
       return (
@@ -324,38 +507,32 @@ function PartGeometry({
       );
     case "body-teardrop":
       return (
-        <group
-          position={[0, -0.2, 0]}
-          rotation={[0, 0, 0]}
-          scale={[1.6, 1.5, 1.6]}
-        >
-          <Teardrop
-            color={color}
-            emissive={emissive}
-            showOutline={showOutline}
-            outlineColor={outlineColor}
-            outlineThickness={outlineThickness}
-            segmentCount={segmentCount}
-            segmentColors={rowColors}
-          />
-        </group>
+        <RoundedCapsuleMesh
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          segmentCount={segmentCount}
+          rowColors={rowColors}
+          highlightSegments={highlightSegments}
+        />
       );
     case "arm":
     case "leg":
     case "limb-cylinder":
       return (
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.08, 0.09, 0.56, 18]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.08}
+          bottomRadius={0.09}
+          height={0.56}
+          radialSegments={24}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+        />
       );
     case "limb-sphere":
       return (
@@ -387,6 +564,7 @@ function PartGeometry({
             outlineThickness={outlineThickness}
             segmentCount={segmentCount}
             segmentColors={rowColors}
+            highlightSegments={highlightSegments}
           />
         </group>
       );
@@ -407,18 +585,17 @@ function PartGeometry({
       );
     case "ear-cylinder":
       return (
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.07, 0.07, 0.24, 18]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.07}
+          bottomRadius={0.07}
+          height={0.24}
+          radialSegments={24}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+        />
       );
     case "ear":
     case "ear-cone":
@@ -438,25 +615,25 @@ function PartGeometry({
       );
     case "ear-circle":
       return (
-        <mesh castShadow receiveShadow rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.14, 0.14, 0.035, 24]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.14}
+          bottomRadius={0.14}
+          height={0.035}
+          radialSegments={32}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          rotation={[Math.PI / 2, 0, Math.PI / 2]}
+        />
       );
     case "ear-teardrop":
       return (
         <group
-          position={[0, 0, 0]}
-          rotation={[Math.PI, 0, 0]}
-          scale={[0.5, 0.36, 0.1]}
+          position={[0, -0.1, 0]}
+          rotation={[0, 0, 0]}
+          scale={[0.42, 0.3, 0.18]}
         >
           <Teardrop
             color={color}
@@ -466,6 +643,7 @@ function PartGeometry({
             outlineThickness={outlineThickness}
             segmentCount={segmentCount}
             segmentColors={rowColors}
+            highlightSegments={highlightSegments}
           />
         </group>
       );
@@ -501,18 +679,17 @@ function PartGeometry({
       );
     case "cylinder":
       return (
-        <mesh castShadow receiveShadow>
-          <cylinderGeometry args={[0.2, 0.2, 0.4, 20]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <RoundedCylinderMesh
+          topRadius={0.16}
+          bottomRadius={0.16}
+          height={0.5}
+          radialSegments={28}
+          color={color}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+        />
       );
     case "cone":
       return (
@@ -540,6 +717,7 @@ function PartGeometry({
           outlineThickness={outlineThickness}
           segmentCount={segmentCount}
           rowColors={rowColors}
+          highlightSegments={highlightSegments}
         />
       );
     default:
@@ -572,14 +750,26 @@ export function PartMesh({
   const { scene } = useThree();
   const [hovered, setHovered] = useState(false);
   const [transformMode, setTransformMode] = useState(getTransformMode);
-  const outerGroupRef = useRef<THREE.Group>(null) as React.MutableRefObject<THREE.Group>;
+  const [highlight, setHighlightState] = useState(getHighlight);
+  const outerGroupRef = useRef<THREE.Group>(
+    null,
+  ) as React.MutableRefObject<THREE.Group>;
   const lastScaleRef = useRef({ x: 1, y: 1, z: 1 });
   useCursor(hovered && !selected, "pointer", "auto");
 
   useEffect(() => {
     const unsub = subscribeTransformMode(setTransformMode);
-    return () => { unsub(); };
+    return () => {
+      unsub();
+    };
   }, []);
+
+  useEffect(() => subscribeHighlight(setHighlightState), []);
+
+  const highlightSegments =
+    highlight.instanceId === part.instanceId && highlight.segments.length > 0
+      ? highlight.segments
+      : undefined;
 
   // Imperatively sync position+rotation on outer group so R3F never resets them mid-drag.
   useEffect(() => {
@@ -589,8 +779,22 @@ export function PartMesh({
       slotPosition[1] + part.position[1],
       slotPosition[2] + part.position[2],
     );
-    outerGroupRef.current.rotation.set(part.rotation[0], part.rotation[1], part.rotation[2]);
-  }, [part.position[0], part.position[1], part.position[2], part.rotation[0], part.rotation[1], part.rotation[2], slotPosition[0], slotPosition[1], slotPosition[2]]);
+    outerGroupRef.current.rotation.set(
+      part.rotation[0],
+      part.rotation[1],
+      part.rotation[2],
+    );
+  }, [
+    part.position[0],
+    part.position[1],
+    part.position[2],
+    part.rotation[0],
+    part.rotation[1],
+    part.rotation[2],
+    slotPosition[0],
+    slotPosition[1],
+    slotPosition[2],
+  ]);
 
   // Imperatively sync scale on outer group.
   useEffect(() => {
@@ -607,7 +811,11 @@ export function PartMesh({
     const og = outerGroupRef.current;
     if (!og) return;
     const last = lastScaleRef.current;
-    if (og.scale.x !== last.x || og.scale.y !== last.y || og.scale.z !== last.z) {
+    if (
+      og.scale.x !== last.x ||
+      og.scale.y !== last.y ||
+      og.scale.z !== last.z
+    ) {
       lastScaleRef.current = { x: og.scale.x, y: og.scale.y, z: og.scale.z };
       setLiveScale(og.scale.x, og.scale.y, og.scale.z);
     }
@@ -625,7 +833,9 @@ export function PartMesh({
     if (transformMode === "scale") {
       // Scale is on the outer group (TransformControls scales it directly)
       const clamp = (v: number) => Math.max(0.2, Math.min(3, v));
-      onTransformCommit({ scale: [clamp(og.scale.x), clamp(og.scale.y), clamp(og.scale.z)] });
+      onTransformCommit({
+        scale: [clamp(og.scale.x), clamp(og.scale.y), clamp(og.scale.z)],
+      });
     } else if (transformMode === "translate") {
       onTransformCommit({
         position: [
@@ -635,7 +845,9 @@ export function PartMesh({
         ],
       });
     } else if (transformMode === "rotate") {
-      onTransformCommit({ rotation: [og.rotation.x, og.rotation.y, og.rotation.z] });
+      onTransformCommit({
+        rotation: [og.rotation.x, og.rotation.y, og.rotation.z],
+      });
     }
   };
 
@@ -650,8 +862,9 @@ export function PartMesh({
       showOutline={hovered || selected}
       outlineColor={outlineColor}
       outlineThickness={outlineThickness}
-      segmentCount={getSegmentCount(part.meshId)}
+      segmentCount={computePatternRowCount(part.meshId, part.scale)}
       rowColors={part.rowColors}
+      highlightSegments={highlightSegments}
     />
   );
 
@@ -660,6 +873,28 @@ export function PartMesh({
       ref={outerGroupRef}
       onClick={(e) => {
         e.stopPropagation();
+        if (isEyedropperActive()) {
+          const mesh = e.object as THREE.Mesh;
+          const localPt = mesh.worldToLocal(e.point.clone());
+          const geom = mesh.geometry;
+          geom.computeBoundingBox();
+          const bbox = geom.boundingBox;
+          if (bbox && bbox.max.y > bbox.min.y) {
+            const segCount = computePatternRowCount(part.meshId, part.scale);
+            const t = Math.max(
+              0,
+              Math.min(1, (localPt.y - bbox.min.y) / (bbox.max.y - bbox.min.y)),
+            );
+            const seg = Math.min(
+              segCount - 1,
+              Math.max(0, Math.floor(t * segCount)),
+            );
+            pickEyedropperColor(part.rowColors?.[seg] ?? part.color);
+          } else {
+            pickEyedropperColor(part.color);
+          }
+          return;
+        }
         onClick();
       }}
       onPointerOver={(e) => {
@@ -675,16 +910,17 @@ export function PartMesh({
     >
       {geometry}
 
-      {selected && createPortal(
-        <TransformControls
-          key={transformMode}
-          object={outerGroupRef}
-          mode={transformMode}
-          size={0.9}
-          onMouseUp={handleMouseUp}
-        />,
-        scene,
-      )}
+      {selected &&
+        createPortal(
+          <TransformControls
+            key={transformMode}
+            object={outerGroupRef}
+            mode={transformMode}
+            size={0.9}
+            onMouseUp={handleMouseUp}
+          />,
+          scene,
+        )}
     </group>
   );
 }

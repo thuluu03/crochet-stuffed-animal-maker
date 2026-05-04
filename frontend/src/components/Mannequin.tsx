@@ -64,8 +64,8 @@ export function MannequinBody() {
       {/* Left arm */}
       {!usedSlots.has("leftArm") && (
         <mesh
-          position={[-0.5, 0, 0]}
-          rotation={[0, 0, Math.PI / 1.35]}
+          position={[-0.44, 0.12, 0]}
+          rotation={[0, 0, Math.PI / 2 + Math.PI / 12]}
           castShadow
           receiveShadow
         >
@@ -82,8 +82,8 @@ export function MannequinBody() {
       {/* Right arm */}
       {!usedSlots.has("rightArm") && (
         <mesh
-          position={[0.5, 0, 0]}
-          rotation={[0, 0, -Math.PI / 1.35]}
+          position={[0.44, 0.12, 0]}
+          rotation={[0, 0, -Math.PI / 2 - Math.PI / 12]}
           castShadow
           receiveShadow
         >
@@ -99,8 +99,8 @@ export function MannequinBody() {
       )}
       {/* Left leg */}
       {!usedSlots.has("leftLeg") && (
-        <mesh position={[-0.16, -0.64, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+        <mesh position={[-0.16, -0.515, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.42, 18]} />
           <meshStandardMaterial
             color="#e8dcc8"
             roughness={0.9}
@@ -112,8 +112,8 @@ export function MannequinBody() {
       )}
       {/* Right leg */}
       {!usedSlots.has("rightLeg") && (
-        <mesh position={[0.16, -0.64, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.09, 0.09, 0.48, 18]} />
+        <mesh position={[0.16, -0.515, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.09, 0.09, 0.42, 18]} />
           <meshStandardMaterial
             color="#e8dcc8"
             roughness={0.9}

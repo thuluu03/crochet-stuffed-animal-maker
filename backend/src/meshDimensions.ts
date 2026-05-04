@@ -24,7 +24,7 @@ export const MESH_DIMENSIONS: Record<string, MeshDimensionEntry> = {
   "head-sphere": { connectivityRadius: 0.28 },
   "head-cylinder": { connectivityRadius: 0.28, height: 0.44, tubeRadius: 0.26 },
   "body-sphere": { connectivityRadius: 0.44 },
-  "body-cylinder": { connectivityRadius: 0.44, height: 0.55, tubeRadius: 0.42 },
+  "body-cylinder": { connectivityRadius: 0.44, height: 1, tubeRadius: 0.42 },
   "body-cone": { connectivityRadius: 0.45, height: 0.52, tubeRadius: 0.12 },
   "body-teardrop": { connectivityRadius: 0.44, height: 0.72, tubeRadius: 0.2 },
   "limb-sphere": { connectivityRadius: 0.15 },
@@ -39,8 +39,16 @@ export const MESH_DIMENSIONS: Record<string, MeshDimensionEntry> = {
   sphere: { connectivityRadius: 0.24 },
   cylinder: { connectivityRadius: 0.28, height: 0.48, tubeRadius: 0.26 },
   cone: { connectivityRadius: 0.28, height: 0.45, tubeRadius: 0.1 },
-  "custom-teardrop": { connectivityRadius: 0.4, height: 0.65, tubeRadius: 0.18 },
-  "body-custom-teardrop": { connectivityRadius: 0.44, height: 0.72, tubeRadius: 0.2 },
+  "custom-teardrop": {
+    connectivityRadius: 0.4,
+    height: 0.65,
+    tubeRadius: 0.18,
+  },
+  "body-custom-teardrop": {
+    connectivityRadius: 0.44,
+    height: 0.72,
+    tubeRadius: 0.2,
+  },
 };
 
 const DEFAULT_ENTRY: MeshDimensionEntry = { connectivityRadius: 0.3 };
@@ -66,12 +74,20 @@ export function getMeshDimensionEntry(meshId: string): MeshDimensionEntry {
   return MESH_DIMENSIONS[meshId] ?? DEFAULT_ENTRY;
 }
 
-export function getConnectivityRadius(meshId: string, scale: PartScale): number {
-  return getMeshDimensionEntry(meshId).connectivityRadius * maxScaleFactor(scale);
+export function getConnectivityRadius(
+  meshId: string,
+  scale: PartScale,
+): number {
+  return (
+    getMeshDimensionEntry(meshId).connectivityRadius * maxScaleFactor(scale)
+  );
 }
 
 /** Slot positions — keep in sync with `frontend/src/presets.ts` MANNEQUIN_SLOTS */
-export const MANNEQUIN_SLOT_POSITIONS: Record<string, [number, number, number]> = {
+export const MANNEQUIN_SLOT_POSITIONS: Record<
+  string,
+  [number, number, number]
+> = {
   head: [0, 0.62, 0],
   body: [0, 0, 0],
   leftArm: [-0.5, 0, 0],

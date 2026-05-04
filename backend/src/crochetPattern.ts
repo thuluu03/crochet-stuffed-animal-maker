@@ -5,7 +5,6 @@ import {
   averageHorizontalScaleFactor,
   getConnectivityRadius,
   getMeshDimensionEntry,
-  getSegmentCount,
   meshLabel,
   MANNEQUIN_SLOT_POSITIONS,
   scaleVector,
@@ -203,7 +202,7 @@ function buildColorRuns(
   baseColor: string,
   totalRows: number,
 ): ColorRun[] {
-  const segmentCount = getSegmentCount(part.meshId);
+  const segmentCount = totalRows;
   if (segmentCount <= 0 || totalRows <= 0) {
     return [{ startRow: 1, endRow: totalRows, color: baseColor }];
   }
@@ -451,7 +450,7 @@ function templateCylinder(
     ...lineWithInlineColorChanges(
       circumference / 6 + 2,
       circumference / 6 + hRows,
-      `in blo, sc around [${circumference}]`,
+      `sc around [${circumference}]`,
       colorRuns,
     ),
     ...lineWithInlineColorChanges(

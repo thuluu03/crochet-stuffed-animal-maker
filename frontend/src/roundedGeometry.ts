@@ -1,0 +1,164 @@
+import * as THREE from "three";
+
+function positiveRadius(radius: number): number {
+  return Math.max(radius, 0.001);
+}
+
+/**
+ * Builds a cylinder-like lathe geometry with softened cap-to-side transitions.
+ * The cap remains mostly flat, while the shoulder rounds outward slightly so
+ * cylinders read more like stuffed fabric than hard primitives.
+ */
+export function roundedCylinderGeometry(
+  topRadius: number,
+  bottomRadius: number,
+  height: number,
+  radialSegments = 32,
+  sideSegments = 8,
+  cornerRatio = 0.16
+): THREE.BufferGeometry {
+  const top = positiveRadius(topRadius);
+  const bottom = positiveRadius(bottomRadius);
+  const halfHeight = height / 2;
+  const maxRadius = Math.max(top, bottom);
+  const minRadius = Math.min(top, bottom);
+  const corner = Math.min(
+    halfHeight * 0.42,
+    minRadius * 0.52,
+    maxRadius * cornerRatio
+  );
+  const edgeBulge = corner * 0.18;
+  const points: THREE.Vector2[] = [];
+
+  points.push(new THREE.Vector2(0, -halfHeight));
+  points.push(new THREE.Vector2(Math.max(bottom - corner, 0.001), -halfHeight));
+
+  for (let i = 1; i <= sideSegments; i++) {
+    const t = i / sideSegments;
+    const angle = -Math.PI / 2 + t * (Math.PI / 2);
+    const radius = bottom - corner + (corner + edgeBulge) * Math.cos(angle);
+    const y = -halfHeight + corner + corner * Math.sin(angle);
+    points.push(new THREE.Vector2(radius, y));
+  }
+
+  const sideStartY = -halfHeight + corner;
+  const sideEndY = halfHeight - corner;
+  const sideCount = Math.max(2, sideSegments);
+  for (let i = 1; i < sideCount; i++) {
+    const t = i / sideCount;
+    const radius = THREE.MathUtils.lerp(
+      bottom + edgeBulge,
+      top + edgeBulge,
+      t
+    );
+    const y = THREE.MathUtils.lerp(sideStartY, sideEndY, t);
+    points.push(new THREE.Vector2(radius, y));
+  }
+
+  for (let i = 0; i < sideSegments; i++) {
+    const t = i / sideSegments;
+    const angle = t * (Math.PI / 2);
+    const radius = top - corner + (corner + edgeBulge) * Math.cos(angle);
+    const y = halfHeight - corner + corner * Math.sin(angle);
+    points.push(new THREE.Vector2(radius, y));
+  }
+
+  points.push(new THREE.Vector2(Math.max(top - corner, 0.001), halfHeight));
+  points.push(new THREE.Vector2(0, halfHeight));
+
+  const geometry = new THREE.LatheGeometry(points, radialSegments);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export function capsuleTeardropGeometry(
+  radius = 0.14,
+  minY = -0.18,
+  maxY = 0.7,
+  radialSegments = 32,
+  profileSegments = 14
+): THREE.BufferGeometry {
+  const halfHeight = (maxY - minY) / 2;
+  const bodySideLength = Math.min(radius * 1.55, halfHeight * 0.82);
+  const outerCapLength = radius * 1.6;
+  const outerCapStartY = maxY - outerCapLength;
+  const points: THREE.Vector2[] = [];
+
+  points.push(new THREE.Vector2(0, minY));
+
+  for (let i = 1; i <= profileSegments; i++) {
+    const t = i / profileSegments;
+    const angle = t * (Math.PI / 2);
+    points.push(
+      new THREE.Vector2(
+        radius * Math.pow(Math.sin(angle), 1.55),
+        minY + bodySideLength * (1 - Math.cos(angle))
+      )
+    );
+  }
+
+  points.push(new THREE.Vector2(radius, outerCapStartY));
+
+  for (let i = 1; i <= profileSegments; i++) {
+    const t = i / profileSegments;
+    const angle = t * (Math.PI / 2);
+    points.push(
+      new THREE.Vector2(
+        radius * Math.cos(angle),
+        outerCapStartY + outerCapLength * Math.sin(angle)
+      )
+    );
+  }
+
+  points.push(new THREE.Vector2(0, maxY));
+
+  const geometry = new THREE.LatheGeometry(points, radialSegments);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+export function roundedCapsuleGeometry(
+  radius = 0.22,
+  minY = -0.3,
+  maxY = 0.3,
+  radialSegments = 36,
+  profileSegments = 14
+): THREE.BufferGeometry {
+  const halfHeight = (maxY - minY) / 2;
+  const capRadius = Math.min(radius, halfHeight);
+  const bottomCenterY = minY + capRadius;
+  const topCenterY = maxY - capRadius;
+  const points: THREE.Vector2[] = [];
+
+  points.push(new THREE.Vector2(0, minY));
+
+  for (let i = 1; i <= profileSegments; i++) {
+    const t = i / profileSegments;
+    const angle = -Math.PI / 2 + t * (Math.PI / 2);
+    points.push(
+      new THREE.Vector2(
+        capRadius * Math.cos(angle),
+        bottomCenterY + capRadius * Math.sin(angle)
+      )
+    );
+  }
+
+  points.push(new THREE.Vector2(capRadius, topCenterY));
+
+  for (let i = 1; i <= profileSegments; i++) {
+    const t = i / profileSegments;
+    const angle = t * (Math.PI / 2);
+    points.push(
+      new THREE.Vector2(
+        capRadius * Math.cos(angle),
+        topCenterY + capRadius * Math.sin(angle)
+      )
+    );
+  }
+
+  points.push(new THREE.Vector2(0, maxY));
+
+  const geometry = new THREE.LatheGeometry(points, radialSegments);
+  geometry.computeVertexNormals();
+  return geometry;
+}
