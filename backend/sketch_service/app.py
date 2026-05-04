@@ -63,7 +63,7 @@ class Region:
     width: int
     height: int
     orientation: float
-    class_hint: Literal["head", "body", "arm", "leg"] | None = None
+    class_hint: Literal["head", "body", "arm", "leg", "ear"] | None = None
     # FIXME: Include teardrop once the frontend exposes a teardrop preset for inference.
     shape: Literal["sphere", "cylinder", "cone"] | None = None
 
@@ -151,7 +151,9 @@ def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "co
     return "sphere"
 
 
-def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body", "arm", "leg"]) -> Region:
+def region_from_contour(
+    contour: np.ndarray, class_hint: Literal["head", "body", "arm", "leg", "ear"]
+) -> Region:
     """Build a Region from a contour, capturing only the features the placement code reads.
 
     Center is taken from image moments (more accurate than the bounding-box center for
@@ -328,54 +330,156 @@ def _world_aabb_half_extents(part: PlacedPart) -> tuple[float, float, float]:
     return sx * cos_t + sy * sin_t, sx * sin_t + sy * cos_t, sz
 
 
-def _anchor_parts(parts: list[PlacedPart]) -> None:
-    """Push each placed part's offset so it just touches its anchor part.
+def _anchor_local_extents(anchor: PlacedPart) -> tuple[float, float, float, float, float]:
+    """Anchor's world center and scaled local half-extents.
 
-    Touch rules: the head sits on the body, arms attach to the body's sides, legs
-    hang from the body's bottom, and ears sit on the head. Each adjustment uses the
-    rotated, scaled AABB of both the part and its anchor so the surfaces meet
-    without significant overlap.
+    Returns ``(cx, cy, sx, sy, sz)``. Anchors stay upright (body/head are not
+    rotated in any supported layout), so local axes match world axes.
+    """
+    half = _MESH_LOCAL_HALF_EXTENTS.get(anchor.meshId, (0.24, 0.24, 0.24))
+    sx = anchor.scale.x * half[0]
+    sy = anchor.scale.y * half[1]
+    sz = anchor.scale.z * half[2]
+    cx = _SLOT_POSITION[anchor.slotId][0] + anchor.position.x
+    cy = _SLOT_POSITION[anchor.slotId][1] + anchor.position.y
+    return cx, cy, sx, sy, sz
+
+
+def _anchor_lateral_extent_at_y(anchor: PlacedPart, y_world: float) -> float:
+    """Anchor's lateral X half-extent at world height ``y_world``.
+
+    This is the radius of the anchor's body cross-section at the queried height.
+    Used for limbs touching the side: the limb's outer edge is placed against
+    this radius so it meets the anchor's *actual* slope, not its bounding box.
+    Per-shape:
+
+    - sphere/ellipsoid (apex on +y axis): ``sx * sqrt(1 - (y_local/sy)^2)``,
+      max at the equator.
+    - cone (apex-up): linear taper, ``sx * (sy - y_local) / (2*sy)``, full at
+      the base, zero at the apex.
+    - upright cylinder: constant ``sx`` inside ``|y_local| <= sy``.
+    """
+    _, cy, sx, sy, _ = _anchor_local_extents(anchor)
+    y_local = y_world - cy
+    if anchor.meshId == "sphere":
+        if sy <= 0 or abs(y_local) >= sy:
+            return 0.0
+        return sx * math.sqrt(1.0 - (y_local / sy) ** 2)
+    if anchor.meshId == "cone":
+        if y_local >= sy:
+            return 0.0
+        if y_local <= -sy:
+            return sx
+        return sx * (sy - y_local) / (2.0 * sy)
+    return sx if abs(y_local) <= sy else 0.0
+
+
+def _anchor_top_y_at_x(anchor: PlacedPart, x_world: float) -> float:
+    """Anchor's top-surface world y at lateral position ``x_world``.
+
+    Used for parts seating on top of the anchor (head on body, ears on head).
+    For a sphere head and an ear sitting at ``x = -0.18`` this returns the
+    actual sphere surface height at that x — *not* the AABB top — so the ear
+    sits on the curve where it's centred rather than floating up at the apex.
+
+    When ``x_world`` falls outside the anchor's lateral footprint (the attached
+    part is wider than the anchor), the surface is undefined at that x and we
+    fall back to the anchor's AABB top ``cy + sy``. That keeps the part above
+    the anchor's highest point rather than collapsing toward its center y, so
+    a narrow head with off-center ears still has the ears resting above it.
+    """
+    cx, cy, sx, sy, _ = _anchor_local_extents(anchor)
+    x_abs = abs(x_world - cx)
+    if anchor.meshId == "sphere":
+        if sx <= 0 or x_abs >= sx:
+            return cy + sy
+        return cy + sy * math.sqrt(1.0 - (x_abs / sx) ** 2)
+    if anchor.meshId == "cone":
+        if x_abs > sx:
+            return cy + sy
+        return cy + sy * (1.0 - 2.0 * x_abs / sx)
+    return cy + sy
+
+
+def _anchor_bottom_y_at_x(anchor: PlacedPart, x_world: float) -> float:
+    """Anchor's bottom-surface world y at lateral position ``x_world``.
+
+    Mirror of ``_anchor_top_y_at_x`` for parts hanging below (legs on body).
+    Cones (apex-up) and cylinders have a flat base at ``cy - sy``; spheres
+    rise toward the equator as ``|x|`` increases.
+
+    When ``x_world`` falls outside the anchor's lateral footprint (the leg is
+    farther from center than the body is wide — a narrow ellipse or tall thin
+    cylinder), the surface is undefined and we fall back to the anchor's AABB
+    bottom ``cy - sy``. That hangs the leg just below the body's lowest point
+    rather than collapsing toward its center y.
+    """
+    cx, cy, sx, sy, _ = _anchor_local_extents(anchor)
+    x_abs = abs(x_world - cx)
+    if anchor.meshId == "sphere":
+        if sx <= 0 or x_abs >= sx:
+            return cy - sy
+        return cy - sy * math.sqrt(1.0 - (x_abs / sx) ** 2)
+    if anchor.meshId == "cone":
+        return cy - sy
+    return cy - sy
+
+
+def _anchor_parts(parts: list[PlacedPart]) -> None:
+    """Push each placed part's offset so its surface just touches its anchor part.
+
+    Touch rules: head sits on body, arms attach to body's sides, legs hang from
+    body's bottom, ears sit on head. Each contact evaluates the anchor's *real*
+    surface (not its AABB) at the attached part's center along the perpendicular
+    axis. This makes parts meet the anchor where their centers project onto the
+    surface — the natural attachment point — even when the anchor is curved or
+    tapering (e.g., arms on a cone body sit against the slope, not floating off
+    the AABB edge).
+
+    Trade-off vs a no-overlap formulation: when the anchor tapers across the
+    attached part's span (e.g., cone body across the arm's vertical height),
+    one corner of the attached part may dip slightly into the anchor while the
+    opposite corner has a small gap. The dip is bounded by the anchor's slope
+    and is visually preferable to a noticeably detached limb.
 
     Order matters because ears depend on the head's already-anchored position:
       body -> head -> arms / legs -> ears.
 
-    Mutates each ``PlacedPart``'s ``position`` in place. ``part.position`` is the
-    offset from the slot anchor in world space, matching how the frontend renders
-    parts (``slotPosition + part.position``).
+    Mutates each ``PlacedPart``'s ``position`` in place. ``part.position`` is
+    the offset from the slot anchor in world space, matching how the frontend
+    renders parts (``slotPosition + part.position``).
     """
     by_slot = {p.slotId: p for p in parts}
     body = by_slot.get("body")
     if body is None:
         return
 
-    body_x, body_y, _ = _SLOT_POSITION["body"]
-    body_ex, body_ey, _ = _world_aabb_half_extents(body)
-    body_top = body_y + body_ey
-    body_bottom = body_y - body_ey
-    body_left = body_x - body_ex
-    body_right = body_x + body_ex
-
     head = by_slot.get("head")
     if head is not None:
         _, head_ey, _ = _world_aabb_half_extents(head)
+        head_slot_x, head_slot_y, _ = _SLOT_POSITION["head"]
+        head_x_world = head_slot_x + head.position.x
+        body_top = _anchor_top_y_at_x(body, head_x_world)
         head.position = Vector3(
-            x=0.0,
-            y=(body_top + head_ey) - _SLOT_POSITION["head"][1],
-            z=0.0,
+            x=head.position.x,
+            y=(body_top + head_ey) - head_slot_y,
+            z=head.position.z,
         )
 
-    for slot_id, target_x, sign in (
-        ("leftArm", body_left, -1),
-        ("rightArm", body_right, +1),
-    ):
+    for slot_id, sign in (("leftArm", -1), ("rightArm", +1)):
         arm = by_slot.get(slot_id)
         if arm is None:
             continue
         arm_ex, _, _ = _world_aabb_half_extents(arm)
+        arm_slot_x, arm_slot_y, _ = _SLOT_POSITION[slot_id]
+        arm_y_world = arm_slot_y + arm.position.y
+        body_lateral = _anchor_lateral_extent_at_y(body, arm_y_world)
+        body_x_world = _SLOT_POSITION["body"][0] + body.position.x
+        body_side_x = body_x_world + sign * body_lateral
         arm.position = Vector3(
-            x=(target_x + sign * arm_ex) - _SLOT_POSITION[slot_id][0],
-            y=0.0,
-            z=0.0,
+            x=(body_side_x + sign * arm_ex) - arm_slot_x,
+            y=arm.position.y,
+            z=arm.position.z,
         )
 
     for slot_id in ("leftLeg", "rightLeg"):
@@ -383,23 +487,27 @@ def _anchor_parts(parts: list[PlacedPart]) -> None:
         if leg is None:
             continue
         _, leg_ey, _ = _world_aabb_half_extents(leg)
+        leg_slot_x, leg_slot_y, _ = _SLOT_POSITION[slot_id]
+        leg_x_world = leg_slot_x + leg.position.x
+        body_bottom = _anchor_bottom_y_at_x(body, leg_x_world)
         leg.position = Vector3(
-            x=0.0,
-            y=(body_bottom - leg_ey) - _SLOT_POSITION[slot_id][1],
-            z=0.0,
+            x=leg.position.x,
+            y=(body_bottom - leg_ey) - leg_slot_y,
+            z=leg.position.z,
         )
 
     if head is not None:
-        _, head_ey, _ = _world_aabb_half_extents(head)
-        head_world_top = _SLOT_POSITION["head"][1] + head.position.y + head_ey
         for slot_id in ("leftEar", "rightEar"):
             ear = by_slot.get(slot_id)
             if ear is None:
                 continue
             _, ear_ey, _ = _world_aabb_half_extents(ear)
+            ear_slot_x, ear_slot_y, _ = _SLOT_POSITION[slot_id]
+            ear_x_world = ear_slot_x + ear.position.x
+            head_top = _anchor_top_y_at_x(head, ear_x_world)
             ear.position = Vector3(
                 x=ear.position.x,
-                y=(head_world_top + ear_ey) - _SLOT_POSITION[slot_id][1],
+                y=(head_top + ear_ey) - ear_slot_y,
                 z=ear.position.z,
             )
 
@@ -426,7 +534,7 @@ def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[lis
 
     specs: list[
         tuple[
-            Literal["head", "body", "arm", "leg"],
+            Literal["head", "body", "arm", "leg", "ear"],
             list[tuple[tuple[int, int, int], tuple[int, int, int]]],
             tuple[int, int, int],
         ]
@@ -435,6 +543,9 @@ def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[lis
         ("body", [((100, 80, 50), (130, 255, 255))], (255, 0, 0)),
         ("arm", [((40, 60, 40), (85, 255, 255))], (0, 255, 0)),
         ("leg", [((20, 80, 80), (35, 255, 255))], (0, 255, 255)),
+        # Magenta/pink for ears: hue 140–165 keeps a clear gap from blue (≤130)
+        # below and red (≥170) above so masks don't bleed into adjacent classes.
+        ("ear", [((140, 80, 80), (165, 255, 255))], (255, 0, 255)),
     ]
 
     overlay_masks = image.copy()
