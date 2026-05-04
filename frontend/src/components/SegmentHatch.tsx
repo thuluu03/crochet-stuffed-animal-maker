@@ -12,6 +12,7 @@ export function SegmentHatch({
   yMin,
   yMax,
   yOffset = 0,
+  rotation,
   highlightSegments,
 }: {
   geometry: THREE.BufferGeometry;
@@ -19,6 +20,7 @@ export function SegmentHatch({
   yMin: number;
   yMax: number;
   yOffset?: number;
+  rotation?: [number, number, number];
   highlightSegments: number[];
 }) {
   const material = useMemo(() => {
@@ -67,5 +69,5 @@ export function SegmentHatch({
     });
   }, [segmentCount, yMin, yMax, yOffset, highlightSegments]);
 
-  return <mesh geometry={geometry} material={material} />;
+  return <mesh geometry={geometry} material={material} rotation={rotation} />;
 }

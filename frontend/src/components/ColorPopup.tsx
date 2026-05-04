@@ -117,7 +117,12 @@ export function ColorPopup() {
   const [baseSelected, setBaseSelected] = useState(false);
   const [eyedropperActive, setEyedropperActive] = useState(false);
 
-  useEffect(() => subscribeEyedropper(setEyedropperActive), []);
+  useEffect(() => {
+    const unsub = subscribeEyedropper(setEyedropperActive);
+    return () => {
+      unsub();
+    };
+  }, []);
 
   const onHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {

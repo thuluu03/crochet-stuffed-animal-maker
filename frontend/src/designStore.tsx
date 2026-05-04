@@ -26,6 +26,24 @@ function nextId(): string {
   return "part-" + Math.random().toString(36).slice(2, 11);
 }
 
+function defaultScale(slotId: string): [number, number, number] {
+  if (slotId === "leftLeg" || slotId === "rightLeg") {
+    return [1, 0.88, 1];
+  }
+  return [1, 1, 1];
+}
+
+function defaultRotation(
+  meshId: string,
+  slotId: string,
+  slotRotation: [number, number, number]
+): [number, number, number] {
+  if (meshId === "limb-teardrop" && (slotId === "leftLeg" || slotId === "rightLeg")) {
+    return [0, 0, Math.PI];
+  }
+  return slotRotation;
+}
+
 const DesignContext = createContext<DesignState | null>(null);
 
 export function DesignProvider({ children }: { children: React.ReactNode }) {
@@ -49,8 +67,8 @@ export function DesignProvider({ children }: { children: React.ReactNode }) {
         meshId,
         slotId,
         position: [0, 0, 0],
-        scale: [1, 1, 1] as [number, number, number],
-        rotation: slot.rotation,
+        scale: defaultScale(slotId),
+        rotation: defaultRotation(meshId, slotId, slot.rotation),
         color: "#c4a574",
       };
       return [...prev.filter((p) => p.slotId !== slotId), part];

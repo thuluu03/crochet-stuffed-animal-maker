@@ -450,7 +450,7 @@ function templateCylinder(
     ...lineWithInlineColorChanges(
       circumference / 6 + 2,
       circumference / 6 + hRows,
-      `in blo, sc around [${circumference}]`,
+      `sc around [${circumference}]`,
       colorRuns,
     ),
     ...lineWithInlineColorChanges(
