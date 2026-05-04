@@ -15,10 +15,30 @@ export function SaveAndColor() {
   const [lastSavedDesignId, setLastSavedDesignId] = useState<string | null>(null);
   const [patternLoading, setPatternLoading] = useState(false);
 
-  const handleDownloadPattern = async (designId: string) => {
+  const saveCurrentDesign = async (): Promise<string | null> => {
+    const finalizedMeshes = parts.map((p) => ({
+      partInstanceId: p.instanceId,
+      meshId: p.meshId,
+      slotId: p.slotId,
+      points: [] as number[],
+      indices: [] as number[],
+      colors: [p.color],
+      rowMapping: p.rowColors ? { 0: [] } : undefined,
+    }));
+    const payload = buildPayload(finalizedMeshes);
+    payload.name = designName;
+    if (lastSavedDesignId) payload.id = lastSavedDesignId;
+    const result = await saveDesign(payload);
+    setLastSavedDesignId(result.id);
+    return result.id;
+  };
+
+  const handleDownloadPattern = async () => {
     setPatternLoading(true);
     try {
-      await downloadCrochetPattern(designId, designName);
+      const id = await saveCurrentDesign();
+      if (!id) return;
+      await downloadCrochetPattern(id, designName);
     } catch (e) {
       alert("Pattern download failed: " + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -35,22 +55,9 @@ export function SaveAndColor() {
 
     setSaving(true);
     try {
-      const finalizedMeshes = parts.map((p) => ({
-        partInstanceId: p.instanceId,
-        meshId: p.meshId,
-        slotId: p.slotId,
-        points: [] as number[],
-        indices: [] as number[],
-        colors: [p.color],
-        rowMapping: p.rowColors ? { 0: [] } : undefined,
-      }));
-      const payload = buildPayload(finalizedMeshes);
-      payload.name = designName;
-      const result = await saveDesign(payload);
-      setLastSavedDesignId(result.id);
-      setModal({ type: "success", id: result.id });
+      const id = await saveCurrentDesign();
+      if (id) setModal({ type: "success", id });
     } catch (e) {
-      // keep saving=false, surface as alert for now
       alert("Save failed: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setSaving(false);
@@ -79,9 +86,9 @@ export function SaveAndColor() {
           <button
             type="button"
             className="pattern-btn"
-            onClick={() => lastSavedDesignId && handleDownloadPattern(lastSavedDesignId)}
-            disabled={!lastSavedDesignId || patternLoading}
-            title={lastSavedDesignId ? "Download crochet pattern for the last saved design" : "Save a design first"}
+            onClick={handleDownloadPattern}
+            disabled={parts.length === 0 || patternLoading}
+            title="Save and download crochet pattern"
           >
             {patternLoading ? "Preparing…" : "Download pattern"}
           </button>
@@ -114,7 +121,7 @@ export function SaveAndColor() {
                     type="button"
                     className="pattern-btn pattern-btn--primary"
                     disabled={patternLoading}
-                    onClick={() => handleDownloadPattern(modal.id)}
+                    onClick={handleDownloadPattern}
                   >
                     {patternLoading ? "Preparing…" : "Download crochet pattern"}
                   </button>

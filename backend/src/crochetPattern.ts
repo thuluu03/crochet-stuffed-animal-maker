@@ -486,21 +486,43 @@ function templateCone(
   stBase: number,
   rows: number,
   color: string,
+  colorRuns: ColorRun[],
 ): string {
   const stTip = clampStitches(stBase * 0.15);
   const approx = Math.round(((stBase + stTip) / 2) * rows);
+
+  function stitchesAtRow(row: number): number {
+    if (rows <= 1) return stBase;
+    return Math.round(stBase - (stBase - stTip) * ((row - 1) / (rows - 1)));
+  }
+
+  const rowLines: string[] = [];
+  for (let row = 1; row <= rows; row++) {
+    const st = stitchesAtRow(row);
+    const prevSt = row > 1 ? stitchesAtRow(row - 1) : st;
+    const dec = prevSt - st;
+    let instruction: string;
+    if (row === 1) {
+      instruction = `ch ${stBase}, join into ring (or work flat disk increase rounds until ${stBase} sc) [${stBase}]`;
+    } else if (dec > 0) {
+      instruction = `dec evenly ${dec}× [${st}]`;
+    } else {
+      instruction = `sc around [${st}]`;
+    }
+    rowLines.push(...lineWithInlineColorChanges(row, row, instruction, colorRuns));
+  }
+
   return [
-    `Suggested yarn color: ${color}`,
+    `Suggested yarn color: ${describeColor(colorRuns[0]?.color ?? color)}`,
     "",
     "Cone shape: start at the wide base and decrease toward the tip.",
     "",
     `Base radius ≈ ${rBase.toFixed(3)}; height ≈ ${height.toFixed(3)}.`,
     `Base round ~${stBase} sc; tip target ~${stTip} sc; ~${rows} shaping rows.`,
     "",
-    "Suggested steps:",
-    `1. Begin with a round of ~${stBase} sc (magic ring + increases, or chain ring).`,
-    "2. Each row, decrease evenly while maintaining a smooth cone until a small opening remains at the tip.",
-    "3. Stuff lightly if needed; close the tip or leave a yarn tail for sewing.",
+    ...rowLines,
+    "",
+    "Stuff lightly if needed; close tip or leave yarn tail for sewing.",
     "",
     `Approximate total stitches (very rough): ~${approx}.`,
   ].join("\n");
@@ -611,8 +633,9 @@ function partPatternBody(
       averageHorizontalScaleFactor(scale);
     const height = (dim.height ?? dim.connectivityRadius * 1.2) * scale.y;
     const stBase = stitchesForCircumference(rBase);
-    const rows = rowsForLength(height);
-    return templateCone(rBase, height, stBase, rows, color);
+    const rows = rowsForLength(height * 2);
+    const colorRuns = buildColorRuns(part, color, rows);
+    return templateCone(rBase, height, stBase, rows, color, colorRuns);
   }
 
   if (family === "teardrop") {

@@ -60,7 +60,7 @@ export function computePatternRowCount(
 
   if (family === "cone") {
     const height = (dim.height ?? dim.connectivityRadius * 1.2) * sy;
-    return Math.max(1, Math.round(height / ROW_HEIGHT));
+    return Math.max(1, Math.round((height * 2) / ROW_HEIGHT));
   }
 
   // sphere

@@ -50,7 +50,7 @@ export function Teardrop({
     []
   );
 
-  const coloredSphereGeom = useMemo(() => {
+  const coloredSphere = useMemo(() => {
     if (segmentCount <= 0) return null;
     return addSegmentVertexColorsWithRange(
       sphereGeom.clone(), segmentCount, color, segmentColors,
@@ -58,7 +58,7 @@ export function Teardrop({
     );
   }, [sphereGeom, segmentCount, color, segmentColors]);
 
-  const coloredConeGeom = useMemo(() => {
+  const coloredCone = useMemo(() => {
     if (segmentCount <= 0) return null;
     return addSegmentVertexColorsWithRange(
       coneGeom.clone(), segmentCount, color, segmentColors,
@@ -66,12 +66,12 @@ export function Teardrop({
     );
   }, [coneGeom, segmentCount, color, segmentColors]);
 
-  if (segmentCount > 0 && coloredSphereGeom && coloredConeGeom) {
+  if (segmentCount > 0 && coloredSphere && coloredCone) {
     return (
       <group>
         <mesh position={[0, TEARDROP_CONE_POSITION_Y, 0]} castShadow receiveShadow>
-          <primitive object={coloredConeGeom} attach="geometry" />
-          <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+          <primitive object={coloredCone.geometry} attach="geometry" />
+          <meshStandardMaterial map={coloredCone.texture} roughness={0.8} metalness={0.1} emissive={emissive} />
           {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
         </mesh>
         {highlightSegments && (
@@ -85,8 +85,8 @@ export function Teardrop({
           />
         )}
         <mesh position={[0, 0, 0]} castShadow receiveShadow>
-          <primitive object={coloredSphereGeom} attach="geometry" />
-          <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+          <primitive object={coloredSphere.geometry} attach="geometry" />
+          <meshStandardMaterial map={coloredSphere.texture} roughness={0.8} metalness={0.1} emissive={emissive} />
           {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
         </mesh>
         {highlightSegments && (

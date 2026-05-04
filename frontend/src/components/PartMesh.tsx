@@ -39,7 +39,7 @@ interface PartGeometryProps {
   highlightSegments?: number[];
 }
 
-/** Renders a mesh with vertex colors by segment (horizontal bands). */
+/** Renders a mesh with sharp per-row color bands using a 1D nearest-filter texture. */
 function SegmentColoredMesh({
   meshId,
   segmentCount,
@@ -68,18 +68,22 @@ function SegmentColoredMesh({
     const bb = baseGeom.boundingBox!;
     return { yMin: bb.min.y, yMax: bb.max.y };
   }, [baseGeom]);
-  const coloredGeom = useMemo(() => {
-    if (!baseGeom || segmentCount <= 0) return baseGeom;
+  const segmented = useMemo(() => {
+    if (!baseGeom || segmentCount <= 0) return null;
     return addSegmentVertexColors(baseGeom.clone(), segmentCount, color, rowColors);
   }, [baseGeom, segmentCount, color, rowColors]);
 
-  if (!coloredGeom) return null;
+  if (!baseGeom) return null;
 
   return (
     <group>
       <mesh castShadow receiveShadow>
-        <primitive object={coloredGeom} attach="geometry" />
-        <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
+        <primitive object={segmented?.geometry ?? baseGeom} attach="geometry" />
+        {segmented ? (
+          <meshStandardMaterial map={segmented.texture} roughness={0.8} metalness={0.1} emissive={emissive} />
+        ) : (
+          <meshStandardMaterial color={color} roughness={0.8} metalness={0.1} emissive={emissive} />
+        )}
         {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
       </mesh>
       {highlightSegments && baseGeom && yBounds && (
@@ -96,8 +100,9 @@ function SegmentColoredMesh({
 }
 
 const CUSTOM_TEARDROP_URL = "/custom_teardrop.glb";
-const CUSTOM_TEARDROP_TARGET_MAX_WIDTH_DEPTH = 0.88;
-const CUSTOM_TEARDROP_TARGET_MIN_Y = -0.44;
+const CUSTOM_TEARDROP_TARGET_MAX_WIDTH_DEPTH = 0.58;
+const CUSTOM_TEARDROP_TARGET_MIN_Y = -0.29;
+useGLTF.clear(CUSTOM_TEARDROP_URL);
 useGLTF.preload(CUSTOM_TEARDROP_URL);
 
 /** Renders the custom teardrop GLB, with optional segment vertex colors. */
@@ -181,6 +186,8 @@ function CustomTeardropGLTF({
       const normalizedGeom = geom.clone();
       normalizedGeom.applyMatrix4(scaleMatrix);
       normalizedGeom.applyMatrix4(translateMatrix);
+      normalizedGeom.deleteAttribute("normal");
+      normalizedGeom.computeVertexNormals();
       return normalizedGeom;
     });
 
@@ -205,16 +212,19 @@ function CustomTeardropGLTF({
     );
   }, [normalized, segmentCount, color, rowColors]);
 
-  const meshes = (coloredGeoms ?? normalized.geometries).map((geom, i) => (
-    <mesh key={i} geometry={geom} castShadow receiveShadow>
-      {coloredGeoms ? (
-        <meshStandardMaterial vertexColors roughness={0.8} metalness={0.1} emissive={emissive} />
-      ) : (
-        <meshStandardMaterial color={color} emissive={emissive} roughness={0.8} metalness={0.1} />
-      )}
-      {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
-    </mesh>
-  ));
+  const meshes = normalized.geometries.map((geom, i) => {
+    const sc = coloredGeoms?.[i];
+    return (
+      <mesh key={i} geometry={sc?.geometry ?? geom} castShadow receiveShadow>
+        {sc ? (
+          <meshStandardMaterial map={sc.texture} roughness={0.8} metalness={0.1} emissive={emissive} />
+        ) : (
+          <meshStandardMaterial color={color} emissive={emissive} roughness={0.8} metalness={0.1} />
+        )}
+        {showOutline && <Outlines thickness={outlineThickness} color={outlineColor} />}
+      </mesh>
+    );
+  });
 
   const hatchOverlays = highlightSegments && normalized.bounds
     ? normalized.geometries.map((geom, i) => (
@@ -329,18 +339,17 @@ function PartGeometry({
       );
     case "body-cone":
       return (
-        <mesh castShadow receiveShadow>
-          <coneGeometry args={[0.38, 0.84, 28]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <SegmentColoredMesh
+          meshId={meshId}
+          segmentCount={segmentCount}
+          color={color}
+          rowColors={rowColors}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          highlightSegments={highlightSegments}
+        />
       );
     case "body-teardrop":
       return (
@@ -445,18 +454,17 @@ function PartGeometry({
     case "ear":
     case "ear-cone":
       return (
-        <mesh castShadow receiveShadow>
-          <coneGeometry args={[0.12, 0.3, 18]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <SegmentColoredMesh
+          meshId={meshId}
+          segmentCount={segmentCount}
+          color={color}
+          rowColors={rowColors}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          highlightSegments={highlightSegments}
+        />
       );
     case "ear-circle":
       return (
@@ -539,18 +547,17 @@ function PartGeometry({
       );
     case "cone":
       return (
-        <mesh castShadow receiveShadow>
-          <coneGeometry args={[0.2, 0.5, 20]} />
-          <meshStandardMaterial
-            color={color}
-            roughness={0.8}
-            metalness={0.1}
-            emissive={emissive}
-          />
-          {showOutline && (
-            <Outlines thickness={outlineThickness} color={outlineColor} />
-          )}
-        </mesh>
+        <SegmentColoredMesh
+          meshId={meshId}
+          segmentCount={segmentCount}
+          color={color}
+          rowColors={rowColors}
+          emissive={emissive}
+          showOutline={showOutline}
+          outlineColor={outlineColor}
+          outlineThickness={outlineThickness}
+          highlightSegments={highlightSegments}
+        />
       );
     case "custom-teardrop":
     case "body-custom-teardrop":
