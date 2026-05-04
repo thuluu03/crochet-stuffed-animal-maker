@@ -51,6 +51,8 @@ class InferDebugResponse(BaseModel):
 
 @dataclass
 class Region:
+    """A color-tagged contour with the geometric features the placement code consumes."""
+
     min_x: int
     min_y: int
     max_x: int
@@ -60,11 +62,10 @@ class Region:
     center_y: float
     width: int
     height: int
-    aspect_ratio: float
-    circularity: float
     orientation: float
-    class_hint: Literal["head", "body", "arm", "leg", "limb", "ear"] | None = None
-    shape: Literal["sphere", "cylinder", "cone"] | None = None # FIXME: Include teardrop later
+    class_hint: Literal["head", "body", "arm", "leg"] | None = None
+    # FIXME: Include teardrop once the frontend exposes a teardrop preset for inference.
+    shape: Literal["sphere", "cylinder", "cone"] | None = None
 
 
 @dataclass
@@ -117,16 +118,52 @@ def merge_ranges(hsv: np.ndarray, ranges: list[tuple[tuple[int, int, int], tuple
     return mask
 
 
+def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
+    """Classify a contour as sphere/cylinder/cone using how full its rotated bounding box is.
+
+    The classifier hinges on a single rotation-invariant ratio:
+
+        extent = contourArea / minAreaRect.area
+
+    For ideal shapes this ratio sits at three well-separated values:
+      - rectangle  ~ 1.0
+      - ellipse / circle ~ pi / 4 (~0.785)
+      - triangle   ~ 0.5
+
+    Pure ``extent`` thresholds are used for the rectangle and ellipse branches, since
+    those buckets stay clean even with pixel-level noise. ``approxPolyDP`` is consulted
+    only as a tiebreaker for triangles, where vertex count is the most reliable cue.
+    """
+    area = float(cv2.contourArea(contour))
+    perimeter = float(cv2.arcLength(contour, True))
+    if area <= 0 or perimeter <= 0:
+        return "sphere"
+
+    (_, _), (rw, rh), _ = cv2.minAreaRect(contour)
+    extent = area / max(1.0, float(rw) * float(rh))
+
+    approx = cv2.approxPolyDP(contour, epsilon=0.04 * perimeter, closed=True)
+
+    if extent >= 0.85:
+        return "cylinder"
+    if len(approx) == 3 or extent <= 0.6:
+        return "cone"
+    return "sphere"
+
+
 def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body", "arm", "leg"]) -> Region:
-    """Convert a contour into normalized geometric region metadata."""
+    """Build a Region from a contour, capturing only the features the placement code reads.
+
+    Center is taken from image moments (more accurate than the bounding-box center for
+    asymmetric shapes), and the principal-axis orientation comes from PCA on the
+    contour points so cylinders can be rotated to match elongated rectangles.
+    """
     area = float(cv2.contourArea(contour))
     x, y, w, h = cv2.boundingRect(contour)
-    perimeter = float(cv2.arcLength(contour, True))
     moments = cv2.moments(contour)
     cx = moments["m10"] / moments["m00"] if moments["m00"] else x + w / 2
     cy = moments["m01"] / moments["m00"] if moments["m00"] else y + h / 2
     points = contour.reshape(-1, 2).astype(np.float32)
-    circularity = (4 * math.pi * area / (perimeter * perimeter)) if perimeter else 0.0
     return Region(
         min_x=int(x),
         min_y=int(y),
@@ -137,8 +174,6 @@ def region_from_contour(contour: np.ndarray, class_hint: Literal["head", "body",
         center_y=float(cy),
         width=int(w),
         height=int(h),
-        aspect_ratio=float(w / max(1, h)),
-        circularity=float(circularity),
         orientation=pca_orientation(points),
         class_hint=class_hint,
         shape=shape_from_contour(contour),
@@ -158,10 +193,16 @@ def normalized_dim(px: float, image_max: int) -> float:
 def scale_from_region(slot_id: str, region: Region, width: int, height: int) -> Vector3:
     """3D scale matched to the region, accounting for the mesh's local axes after rotation.
 
-    - ``sphere``: uniform scale based on the larger side (mesh is isotropic).
-    - ``cone``: ``y`` is the apex-to-base length, ``x``/``z`` is the base radius. For
-      arm slots the cone is rotated 90° so its length lies along the rectangle's
-      width; for everything else the cone stays apex-up so length follows height.
+    All pixel sizes are normalized through ``normalized_dim`` so they share a single
+    image-side denominator (avoids skew when the image is non-square) and never fall
+    below ``_MIN_SCALE``.
+
+    - ``sphere``: ``x``/``y`` follow the rectangle's width/height so flat ellipses
+      stay flat; ``z`` uses the smaller of the two so it remains visually thin
+      rather than ballooning into a full sphere.
+    - ``cone``: ``y`` is the apex-to-base length, ``x``/``z`` is the base radius.
+      For arm slots the cone is rotated 90° so its length follows the rectangle's
+      width; otherwise the cone stays apex-up so length follows height.
     - ``cylinder``: the mesh is rotated so its length lies along the rectangle's
       long axis, so ``y`` (length) follows the long side and ``x``/``z`` (radius)
       follow the short side. The circular caps end up at the short-side ends.
@@ -182,10 +223,8 @@ def scale_from_region(slot_id: str, region: Region, width: int, height: int) -> 
 
 
 # Z rotation that points a cone's apex (default +Y) toward the body anchor at the origin.
-# Three.js Z rotations are counterclockwise viewed from +Z, so a +Z rotation sends +Y to
-# -X. The left-arm slot sits at -X (so apex must point +X, hence -pi/2) and the right-arm
-# slot sits at +X (so apex must point -X, hence +pi/2). Leg slots sit below the body, so
-# the default apex-up orientation already faces the body.
+# A +Z rotation in Three.js sends +Y to -X (counterclockwise viewed from +Z), so the left
+# arm needs -pi/2 and the right arm +pi/2. Legs already face the body (apex-up).
 _CONE_APEX_TOWARD_BODY: dict[str, float] = {
     "leftArm": -math.pi / 2,
     "rightArm": math.pi / 2,
@@ -234,7 +273,7 @@ def _mirror_part(source: PlacedPart, target_slot_id: str) -> PlacedPart:
     )
 
 
-def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mesh_id: str) -> None:
+def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str) -> None:
     """If only one side of a pair is present, mirror it onto the other side."""
     left = next((p for p in parts if p.slotId == left_slot), None)
     right = next((p for p in parts if p.slotId == right_slot), None)
@@ -243,38 +282,22 @@ def add_symmetric(parts: list[PlacedPart], left_slot: str, right_slot: str, _mes
     elif right and not left:
         parts.append(_mirror_part(right, left_slot))
 
-def shape_from_contour(contour: np.ndarray) -> Literal["sphere", "cylinder", "cone"]:
-    """Classify a contour as sphere/cylinder/cone using how full its rotated bounding box is.
-
-    The rotated-bounding-box extent (``area / minAreaRect.area``) cleanly separates the
-    three target shapes regardless of rotation:
-      - Rectangle ~ 1.0
-      - Ellipse / circle ~ pi/4 (~0.785)
-      - Triangle ~ 0.5
-
-    Polygonal approximation is used only as a tiebreaker for triangles, since vertex
-    counts are easily perturbed by small contour noise (e.g. when two regions touch).
-    """
-    area = float(cv2.contourArea(contour))
-    perimeter = float(cv2.arcLength(contour, True))
-    if area <= 0 or perimeter <= 0:
-        return "sphere"
-
-    (_, _), (rw, rh), _ = cv2.minAreaRect(contour)
-    rotated_box_area = max(1.0, float(rw) * float(rh))
-    extent = area / rotated_box_area
-
-    approx = cv2.approxPolyDP(contour, epsilon=0.04 * perimeter, closed=True)
-    vertices = len(approx)
-
-    if extent >= 0.85:
-        return "cylinder"
-    if vertices == 3 or extent <= 0.6:
-        return "cone"
-    return "sphere"
 
 def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[list[Region], RegionExtractionDebug | None]:
-    """Extract color-coded part regions (red/blue/green/yellow) and optional debug frames."""
+    """Segment the sketch into color-tagged regions, sorted by area (largest first).
+
+    For each part class (head/body/arm/leg), the function:
+    1. Builds an HSV mask via ``merge_ranges`` over one or more inclusive HSV ranges
+       (head uses two to wrap the red hue around 0/180).
+    2. Cleans the mask with morphological open then close to remove speckle and seal
+       small gaps along the contour.
+    3. Extracts external contours and drops any below ``min_area`` (a fraction of the
+       image area) to ignore stray pixels.
+    4. Annotates three debug canvases (mask overlay, contour outlines, labeled bboxes)
+       in lockstep so they line up with the produced regions.
+
+    Returns the regions and, when ``include_debug`` is true, the three debug frames.
+    """
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     height, width = image.shape[:2]
@@ -345,6 +368,7 @@ def extract_regions(image: np.ndarray, include_debug: bool = False) -> tuple[lis
     )
     return regions, debug
 
+
 _PAIRED_SLOTS: tuple[tuple[str, str, str], ...] = (
     ("arm", "leftArm", "rightArm"),
     ("leg", "leftLeg", "rightLeg"),
@@ -353,7 +377,18 @@ _PAIRED_SLOTS: tuple[tuple[str, str, str], ...] = (
 
 
 def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPart]:
-    """Map color-tagged regions to mannequin slots and shape meshes.
+    """Convert color-tagged regions into placed 3D parts on the mannequin.
+
+    Pipeline:
+    1. Pick the body region (largest blue blob, with a fallback to the largest
+       region overall) — its centroid acts as the symmetry axis for L/R splits.
+    2. Pick the head region (largest red blob), if present.
+    3. For each paired class (arm/leg/ear), pick the largest matching region on
+       each side of the body's centroid via ``pick_side``. Because ``regions`` is
+       already sorted by area, the first match per side is the largest.
+    4. Mirror any side that is missing its pair via ``add_symmetric``.
+    5. Add a default sphere head if no head was detected so the mannequin is never
+       headless.
 
     Assumes ``regions`` come from ``extract_regions``: every ``class_hint`` is set
     and the list is sorted by area (largest first).
@@ -383,8 +418,7 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
             parts.append(make_part(left_slot, left, width, height))
         if right:
             parts.append(make_part(right_slot, right, width, height))
-        # Mirror whichever side is present when the other is missing.
-        add_symmetric(parts, left_slot, right_slot, "")
+        add_symmetric(parts, left_slot, right_slot)
 
     if not any(p.slotId == "head" for p in parts):
         parts.append(
@@ -403,7 +437,6 @@ def map_regions(regions: list[Region], width: int, height: int) -> list[PlacedPa
 def build_pipeline_debug_image(original: np.ndarray, debug: RegionExtractionDebug) -> np.ndarray:
     """Compose a 2x2 debug canvas for original, masks, contours, and labels."""
     def panel(title: str, panel_image: np.ndarray) -> np.ndarray:
-        """Annotate a debug panel image with a title."""
         pane = panel_image.copy()
         cv2.putText(
             pane,
@@ -417,12 +450,8 @@ def build_pipeline_debug_image(original: np.ndarray, debug: RegionExtractionDebu
         )
         return pane
 
-    top_left = panel("Original image", original)
-    top_right = panel("Overlay masks", debug.overlay_masks)
-    bottom_left = panel("Detected contours", debug.detected_contours)
-    bottom_right = panel("Labeled parts", debug.labeled_parts)
-    top = np.hstack([top_left, top_right])
-    bottom = np.hstack([bottom_left, bottom_right])
+    top = np.hstack([panel("Original image", original), panel("Overlay masks", debug.overlay_masks)])
+    bottom = np.hstack([panel("Detected contours", debug.detected_contours), panel("Labeled parts", debug.labeled_parts)])
     return np.vstack([top, bottom])
 
 
@@ -449,6 +478,48 @@ def save_debug_pipeline_images(
     return run_dir
 
 
+def _run_inference(sketch_path: str) -> tuple[list[PlacedPart], Path]:
+    """Load a sketch, extract regions, place parts, and persist debug images.
+
+    Steps:
+    1. Resolve the sketch path through ``ensure_sketch_path`` to keep callers from
+       reading files outside ``SKETCHES_DIR``.
+    2. Read the image and downscale to ``MAX_DIMENSION`` so contour detection stays
+       fast and consistent across input sizes.
+    3. Run ``extract_regions`` (with debug frames) and bail out if nothing was found.
+    4. Map regions to placed parts and write the debug bundle to disk.
+
+    Raises ``HTTPException`` for caller-friendly errors and returns the parts plus the
+    on-disk debug directory the caller can surface to the API consumer.
+    """
+    try:
+        image_path = ensure_sketch_path(sketch_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Sketch file not found")
+
+    image = cv2.imread(str(image_path))
+    if image is None:
+        raise HTTPException(status_code=422, detail="Failed to read sketch image")
+
+    h, w = image.shape[:2]
+    if max(h, w) > MAX_DIMENSION:
+        scale = MAX_DIMENSION / max(h, w)
+        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
+    regions, debug = extract_regions(image, include_debug=True)
+    if not regions or debug is None:
+        raise HTTPException(status_code=422, detail="No color-coded parts detected")
+
+    ih, iw = image.shape[:2]
+    parts = map_regions(regions, iw, ih)
+    pipeline = build_pipeline_debug_image(image, debug)
+    run_dir = save_debug_pipeline_images(sketch_path, image, debug, pipeline)
+    return parts, run_dir
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Lightweight health check endpoint for service readiness."""
@@ -458,60 +529,12 @@ def health() -> dict[str, str]:
 @app.post("/infer", response_model=InferResponse)
 def infer(request: InferRequest) -> InferResponse:
     """Infer placed parts from a sketch and save debug pipeline images."""
-    try:
-        image_path = ensure_sketch_path(request.sketchPath)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not image_path.is_file():
-        raise HTTPException(status_code=404, detail="Sketch file not found")
-
-    image = cv2.imread(str(image_path))
-    if image is None:
-        raise HTTPException(status_code=422, detail="Failed to read sketch image")
-
-    h, w = image.shape[:2]
-    if max(h, w) > MAX_DIMENSION:
-        scale = MAX_DIMENSION / max(h, w)
-        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-
-    regions, debug = extract_regions(image, include_debug=True)
-    if not regions or debug is None:
-        raise HTTPException(status_code=422, detail="No color-coded parts detected")
-
-    ih, iw = image.shape[:2]
-    parts = map_regions(regions, iw, ih)
-    pipeline = build_pipeline_debug_image(image, debug)
-    save_debug_pipeline_images(request.sketchPath, image, debug, pipeline)
+    parts, _ = _run_inference(request.sketchPath)
     return InferResponse(placedParts=parts)
 
 
 @app.post("/infer-debug", response_model=InferDebugResponse)
 def infer_debug(request: InferRequest) -> InferDebugResponse:
     """Run inference and return parts plus the written debug output directory."""
-    try:
-        image_path = ensure_sketch_path(request.sketchPath)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    if not image_path.is_file():
-        raise HTTPException(status_code=404, detail="Sketch file not found")
-
-    image = cv2.imread(str(image_path))
-    if image is None:
-        raise HTTPException(status_code=422, detail="Failed to read sketch image")
-
-    h, w = image.shape[:2]
-    if max(h, w) > MAX_DIMENSION:
-        scale = MAX_DIMENSION / max(h, w)
-        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-
-    regions, debug = extract_regions(image, include_debug=True)
-    if not regions or debug is None:
-        raise HTTPException(status_code=422, detail="No color-coded parts detected")
-
-    ih, iw = image.shape[:2]
-    parts = map_regions(regions, iw, ih)
-    pipeline = build_pipeline_debug_image(image, debug)
-    run_dir = save_debug_pipeline_images(request.sketchPath, image, debug, pipeline)
+    parts, run_dir = _run_inference(request.sketchPath)
     return InferDebugResponse(placedParts=parts, debugOutputDir=str(run_dir))
